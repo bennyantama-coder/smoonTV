@@ -47,13 +47,16 @@ final class Config {
         return instance;
     }
 
+    static synchronized void reset() { instance = null; }
+
     private Config(Context c) {
+        android.content.SharedPreferences saved = HomePrefs.of(c);
         Resources r = c.getResources();
-        primaryZone = ZoneId.of(r.getString(R.string.primary_zone).trim());
-        prayerEnabled = r.getBoolean(R.bool.prayer_enabled);
-        cityLabel = r.getString(R.string.prayer_city_label).trim();
-        lat = coordinate(r.getString(R.string.prayer_lat), 90, "prayer_lat");
-        lng = coordinate(r.getString(R.string.prayer_lng), 180, "prayer_lng");
+        primaryZone = ZoneId.of(saved.getString("zone", r.getString(R.string.primary_zone)).trim());
+        prayerEnabled = saved.getBoolean("prayer_enabled", r.getBoolean(R.bool.prayer_enabled));
+        cityLabel = saved.getString("city", r.getString(R.string.prayer_city_label)).trim();
+        lat = coordinate(saved.getString("lat", r.getString(R.string.prayer_lat)), 90, "prayer_lat");
+        lng = coordinate(saved.getString("lng", r.getString(R.string.prayer_lng)), 180, "prayer_lng");
         method = method(r.getString(R.string.prayer_method));
         madhab = "SHAFI".equalsIgnoreCase(r.getString(R.string.prayer_madhab).trim()) ? Madhab.SHAFI : Madhab.HANAFI;
 
@@ -67,10 +70,10 @@ final class Config {
         secondLat = coordinate(r.getString(R.string.second_lat), 90, "second_lat");
         secondLng = coordinate(r.getString(R.string.second_lng), 180, "second_lng");
 
-        weatherEnabled = r.getBoolean(R.bool.weather_enabled);
+        weatherEnabled = saved.getBoolean("weather_enabled", r.getBoolean(R.bool.weather_enabled));
         weatherUnits = "fahrenheit".equalsIgnoreCase(r.getString(R.string.weather_units).trim()) ? "fahrenheit" : "celsius";
 
-        thoughtsEnabled = r.getBoolean(R.bool.thoughts_enabled);
+        thoughtsEnabled = saved.getBoolean("thoughts_enabled", r.getBoolean(R.bool.thoughts_enabled));
         defaultClockFont = "outfit".equalsIgnoreCase(r.getString(R.string.clock_font).trim()) ? 1 : 0;
         String size = r.getString(R.string.text_size).trim().toLowerCase(Locale.ROOT);
         defaultTextSize = size.equals("larger") ? 2 : size.equals("large") ? 1 : 0;

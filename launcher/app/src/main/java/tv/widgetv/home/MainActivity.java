@@ -46,6 +46,7 @@ import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.time.LocalDate;
@@ -117,6 +118,10 @@ public class MainActivity extends Activity {
     private TextView hereTemp, awayTemp, awayRange, thoughtTag, thoughtText, thoughtSource;
     private LocalDate shownThoughtDate;
     private Config cfg;
+    private int editorRevision;
+    private boolean heldOk;
+    private android.graphics.Bitmap wallpaperBitmap;
+    private final Runnable longPressEdit = () -> { heldOk = true; openEditor(); };
     private View header, awayRow;
     /** The panel's rows (ROW_* ids): all nine with prayer times on, only font and text size without. */
     private int[] panelRows;
@@ -146,6 +151,7 @@ public class MainActivity extends Activity {
         thoughtSource = findViewById(R.id.thought_source);
         thoughts = new Thoughts(this);
         cfg = Config.get(this);
+        editorRevision = HomePrefs.revision(this);
         header = findViewById(R.id.header);
         awayRow = findViewById(R.id.away_row);
         panelRows = cfg.prayerEnabled ? new int[]{ROW_ASR, ROW_METHOD, ROW_OFFSET, ROW_OFFSET + 1, ROW_OFFSET + 2,
@@ -162,8 +168,10 @@ public class MainActivity extends Activity {
         panel = findViewById(R.id.panel);
         pills = new ImageView[]{findViewById(R.id.btn_inputs), findViewById(R.id.btn_wifi),
                 findViewById(R.id.btn_settings)};
-        dockPackages = Arrays.asList(getResources().getStringArray(R.array.dock_packages));
-        hiddenPackages = Arrays.asList(getResources().getStringArray(R.array.hidden_packages));
+        dockPackages = HomePrefs.dock(this);
+        // Dock entries removed by the editor must become visible in the app grid again.
+        hiddenPackages = new ArrayList<>(Arrays.asList(getResources().getStringArray(R.array.hidden_packages)));
+        hiddenPackages.removeAll(Arrays.asList(getResources().getStringArray(R.array.dock_packages)));
         weather = new Weather(this);
         applyClockFont();
         applyTextSize();
@@ -180,6 +188,12 @@ public class MainActivity extends Activity {
         dockAdapter = new TileAdapter(dockH * 16 / 9, dockH);
         gridAdapter = new TileAdapter(-1, cardH);
         setUpList(dockList = findViewById(R.id.dock), dockAdapter);
+        dockList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        dockList.getLayoutParams().height = dockH + dp(60);
+        dockList.setClipToPadding(false);
+        dockList.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(RecyclerView v, int dx, int dy) { updateGlass(false); }
+        });
         setUpList(gridList = findViewById(R.id.grid), gridAdapter);
 
         prefs = getSharedPreferences("focus", MODE_PRIVATE);
@@ -206,6 +220,7 @@ public class MainActivity extends Activity {
         if (BuildConfig.DEBUG) register(debugReceiver, new IntentFilter(debugAction()), true);
 
         getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(networkCallback, main);
+        loadWallpaper();
     }
 
     private void setUpList(RecyclerView list, TileAdapter adapter) {
@@ -219,6 +234,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (HomePrefs.revision(this) != editorRevision) {
+            Config.reset();
+            recreate();
+            return;
+        }
         resumed = true;
         IntentFilter timeFilter = new IntentFilter(Intent.ACTION_TIME_TICK);
         timeFilter.addAction(Intent.ACTION_TIME_CHANGED);
@@ -231,8 +251,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        main.removeCallbacks(longPressEdit);
+        if (resumed) unregisterReceiver(timeReceiver);
         resumed = false;
-        unregisterReceiver(timeReceiver);
         if (zone == Zone.MENU) closeMenu();
         if (zone == Zone.PANEL) closePanel();
         String pkg = focusedPkg();
@@ -266,6 +287,7 @@ public class MainActivity extends Activity {
         unregisterReceiver(packageReceiver);
         if (BuildConfig.DEBUG) unregisterReceiver(debugReceiver);
         getSystemService(ConnectivityManager.class).unregisterNetworkCallback(networkCallback);
+        main.removeCallbacks(longPressEdit);
         io.shutdownNow();
         weather.shutdown();
     }
@@ -309,6 +331,7 @@ public class MainActivity extends Activity {
         dockAdapter.focused = zone == Zone.DOCK ? dockIdx : -1;
         gridAdapter.focused = zone == Zone.GRID ? gridIdx : -1;
         if (zone == Zone.TOP) setLook(true);
+        if (zone == Zone.DOCK) dockList.post(this::ensureDockVisible);
         needScroll = true; // scroll + ring are placed by onLayoutChanged once the tiles exist
         Log.i(TAG, "apps: dock=" + dock.size() + " grid=" + grid.size());
     }
@@ -343,6 +366,9 @@ public class MainActivity extends Activity {
         int code = ev.getKeyCode();
         boolean down = ev.getAction() == KeyEvent.ACTION_DOWN;
         switch (code) {
+            case KeyEvent.KEYCODE_MENU:
+                if (!down) openEditor();
+                return true;
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -352,7 +378,13 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                if (!down && !ev.isCanceled()) select();
+                if (down && ev.getRepeatCount() == 0) {
+                    heldOk = false;
+                    main.postDelayed(longPressEdit, 650);
+                } else if (!down) {
+                    main.removeCallbacks(longPressEdit);
+                    if (!heldOk && !ev.isCanceled()) select();
+                }
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 // Home never goes "back"; Back only closes the dropdown or the panel.
@@ -413,7 +445,7 @@ public class MainActivity extends Activity {
             case TOP:
                 if (pillIdx == 0) openMenu();
                 else if (pillIdx == 1) start(new Intent(Settings.ACTION_WIFI_SETTINGS));
-                else start(new Intent(Settings.ACTION_SETTINGS));
+                else openEditor();
                 break;
             case TIMELINE:
                 openPanel();
@@ -458,6 +490,7 @@ public class MainActivity extends Activity {
         }
         dockAdapter.focused = z == Zone.DOCK ? dockIdx : -1;
         gridAdapter.focused = z == Zone.GRID ? gridIdx : -1;
+        if (z == Zone.DOCK) ensureDockVisible();
         setLook(true);
         scrollToZone(animate);
         updateGlass(animate);
@@ -524,7 +557,7 @@ public class MainActivity extends Activity {
 
     private void updateGlass(boolean animate) {
         View v = focusedView();
-        if (v == null || v.getWidth() == 0) return;
+        if (v == null || v.getWidth() == 0) { glass.setRingVisible(false); return; }
         RectF r;
         float radius;
         if (zone == Zone.DOCK || zone == Zone.GRID) {
@@ -563,6 +596,43 @@ public class MainActivity extends Activity {
         Rect r = new Rect(0, 0, v.getWidth(), v.getHeight());
         content.offsetDescendantRectToMyCoords(v, r);
         return new RectF(r);
+    }
+
+
+    private void openEditor() {
+        Intent edit = new Intent(this, HomeEditorActivity.class);
+        String selected = focusedPkg();
+        if (selected != null) edit.putExtra("package", selected);
+        startActivity(edit);
+    }
+
+    private void ensureDockVisible() {
+        LinearLayoutManager manager = (LinearLayoutManager) dockList.getLayoutManager();
+        int first = manager.findFirstCompletelyVisibleItemPosition();
+        int last = manager.findLastCompletelyVisibleItemPosition();
+        if (dockIdx < first || dockIdx > last || first == RecyclerView.NO_POSITION) {
+            manager.scrollToPositionWithOffset(dockIdx, dp(8));
+            dockList.post(() -> { setLook(true); updateGlass(false); });
+        }
+    }
+
+    private void loadWallpaper() {
+        if (!HomePrefs.of(this).getBoolean("custom_wallpaper", false)) return;
+        io.execute(() -> {
+            try {
+                android.graphics.Bitmap bitmap = WallpaperStore.decode(WallpaperStore.file(this));
+                main.post(() -> {
+                    if (isFinishing() || isDestroyed()) { bitmap.recycle(); return; }
+                    wallpaperBitmap = bitmap;
+                    ImageView view = findViewById(R.id.custom_wallpaper);
+                    view.setImageBitmap(bitmap);
+                    int dim = Math.max(0, Math.min(80, HomePrefs.of(this).getInt("dim", 35)));
+                    view.setColorFilter(android.graphics.Color.argb(dim * 255 / 100, 0, 0, 0), android.graphics.PorterDuff.Mode.SRC_ATOP);
+                    view.setVisibility(View.VISIBLE);
+                    sky.setVisibility(View.INVISIBLE);
+                });
+            } catch (Exception e) { Log.w(TAG, "Wallpaper unavailable; using the built-in sky"); }
+        });
     }
 
     // ---------------------------------------------------------------- Inputs dropdown
@@ -847,7 +917,8 @@ public class MainActivity extends Activity {
         awayClock.setText(weekday + hmAmPm(away, h24));
 
         SpannableStringBuilder sb = new SpannableStringBuilder();
-        append(sb, DateFormat.format("EEEE d MMMM", nowMillis()), Lapis.PLASTER_100);
+        append(sb, local.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())), Lapis.PLASTER_100);
+        append(sb, "   ·   " + cfg.cityLabel, Lapis.GOLD_400);
         if (cfg.prayerEnabled) {
             append(sb, "   ·   ", Lapis.MIST_400);
             append(sb, day.hijri(), Lapis.GOLD_400);
