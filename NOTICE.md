@@ -123,22 +123,13 @@ Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed under
 
 ### Adhan recordings
 
-Two recordings are bundled in `launcher/app/src/main/res/raw/`. Each keeps its own licence.
-The app plays the Fajr file at Subuh and the other file at Dhuhr, Asr, Maghrib, and Isha.
+Two MP3 files supplied for this app are bundled unmodified under `launcher/app/src/main/res/raw/`.
+The earlier Wikimedia excerpts (Malmö Fajr and the Atcovi Commons file) are not included.
 
-**Subuh** — `adhan_fajr.ogg`. Audio excerpt of the Fajr adhan recorded at the Islamic Center Malmö
-on 19 August 2012, muezzin Besim Azemi. The excerpt includes *as-salatu khayrun min an-nawm*.
-Source file: [Eid al-Fitr Fajr azan at Malmö Mosque](https://commons.wikimedia.org/wiki/File:Eid_al-Fitr_Fajr_azan_at_Malm%C3%B6_Mosque_-_19_August_2012.webm)
-by Islamic Center Malmö, [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
-Changes: the soundtrack was extracted, trimmed to the adhan, loudness-normalized, and encoded as
-mono Ogg Vorbis.
+**Subuh** — `adzan_subuh.mp3`. Played only at Fajr. It includes *as-salatu khayrun min an-nawm*.
 
-**Zuhur, Asar, Magrib, Isya** — `adhan.mp3`, unmodified.
-[The Adhan - Muslim Call to Prayer - Aaqib Azeez](https://commons.wikimedia.org/wiki/File:The_Adhan_-_Muslim_Call_to_Prayer_-_Aaqib_Azeez.mp3)
-by Atcovi (the file title names Aaqib Azeez),
-[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-This file does not include the Fajr phrase. It is not an adaptation: the bytes in the APK match
-the Commons upload. Share-alike applies to adaptations of this recording, not to the rest of WidgeTV.
+**Zuhur, Asar, Magrib, Isya** — `adzan_selain_subuh_mecca.mp3`. Mecca-style adhan without that line.
+The app chooses the file by resource name. Embedded ID3 titles are not read.
 
 ### Qur'an and hadith quotations
 

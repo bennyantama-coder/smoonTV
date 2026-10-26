@@ -4,7 +4,7 @@
 
 Sumber awal dari ashfaqhaq/widgetv. Proyek Android ada di `launcher/`: Android Gradle Plugin 8.5.2,
 Gradle Wrapper 8.7, Java 17, compile/target SDK 34, minSdk 28 (Android 9).
-Versi aplikasi ini: 1.2 (versionCode 3), bisa disunting dari remote. Adzan Subuh dan adzan salat lain
+Versi aplikasi ini: 1.3 (versionCode 4), bisa disunting dari remote. Adzan Subuh dan adzan salat lain
 dibunyikan oleh alarm pada waktu yang sudah dikoreksi.
 
 `./gradlew assembleDebug lintDebug testDebugUnitTest` lulus di lingkungan penyusunan
@@ -69,27 +69,22 @@ atau setelah TV dimatikan. Menghapus data aplikasi atau meng-uninstall mengembal
 | Lokasi | OK pada kota | Padang (bawaan), Payakumbuh, Bukittinggi, Pekanbaru, Jakarta, Madinah, Makkah, atau koordinat + zona waktu. Untuk waktu salat dan cuaca. Jam mengikuti zona kota itu. Zona sistem TV tidak diubah. |
 | Tata letak baris | OK tampil/sembunyi, kiri/kanan ukuran; ganti mode untuk urutan | Jam, cuaca, waktu salat, kutipan. Ukuran: Kecil / Biasa / Besar. Dock tetap di bawah. |
 | Waktu salat & koreksi | Panel yang sudah ada: kiri/kanan ubah | Metode, mazhab, offset menit. Lihat bagian Metode. |
-| Adzan & alarm | OK hidup/mati tiap waktu, kiri/kanan volume, Dengarkan untuk coba | Subuh memakai rekaman berbeda. Empat salat lain memakai satu rekaman. Lihat bagian Adzan. |
+| Suara adzan | OK hidup/mati, kiri/kanan volume, Dengarkan untuk coba | Subuh memakai rekaman sendiri. Empat salat lain memakai rekaman Mekah. Lihat bagian Adzan. |
 
 Back menutup panel, atau keluar dari WidgeTV ke launcher bawaan bila tidak ada panel.
 
 ## Adzan
 
-Dua rekaman ikut di dalam APK. Keduanya rekaman sungguhan, lisensinya bebas dibagikan, dan bunyinya berbeda:
+Dua rekaman MP3 ikut di dalam APK, berkas yang disediakan untuk WidgeTV. Rekaman Commons sebelumnya tidak dipakai lagi. Bunyinya berbeda:
 
-- **Subuh** memakai adzan fajar dari Islamic Center Malmö (muazin Besim Azemi), 19 Agustus 2012.
-  Rekaman ini memuat kalimat *as-salatu khayrun min an-nawm* (salat lebih baik daripada tidur), dua kali,
-  sesudah *hayya 'ala al-falah*. Sumber: Wikimedia Commons, CC BY 3.0. Audio dipotong dari video,
-  dikeraskan, dan disimpan sebagai Ogg.
-- **Zuhur, Asar, Magrib, dan Isya** memakai satu rekaman lain, tanpa kalimat itu: "The Adhan" oleh
-  Aaqib Azeez, diunggah Atcovi di Wikimedia Commons, CC BY-SA 4.0. Berkas MP3 tidak diubah.
+- **Subuh** memakai `res/raw/adzan_subuh.mp3` (sekitar 3 menit 23 detik). Rekaman ini memuat kalimat *as-salatu khayrun min an-nawm* (salat lebih baik daripada tidur).
+- **Zuhur, Asar, Magrib, dan Isya** memakai `res/raw/adzan_selain_subuh_mecca.mp3` (sekitar 2 menit 23 detik), gaya Mekah, tanpa kalimat itu.
 
-Alarm hidup sejak APK dipasang, termasuk Subuh. Matikan Subuh dari editor bila TV tidak perlu berbunyi
-saat fajar. Alarm memakai waktu salat yang sudah ditambah koreksi menit. Terbit tidak ada adzannya.
+Sakelar **Suara adzan** hidup sejak APK dipasang, termasuk Subuh. Matikan dari editor bila TV tidak perlu berbunyi. Alarm memakai waktu salat yang sudah ditambah koreksi menit. Terbit tidak ada adzannya.
 
 Cara kerjanya di TV:
 
-1. Tahan OK, pilih **Adzan & alarm**.
+1. Tahan OK, pilih **Suara adzan**.
 2. Setiap waktu bisa dimatikan sendiri. Volume: Pelan, Sedang, Keras.
 3. **Dengarkan Subuh** dan **Dengarkan salat lain** memutar bedanya tanpa menggeser alarm.
 4. OK atau Back saat adzan berbunyi menghentikannya. Layar menampilkan "Adzan … · OK hentikan".

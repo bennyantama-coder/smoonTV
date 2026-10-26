@@ -13,7 +13,8 @@ import java.io.File;
 import java.io.IOException;
 
 /**
- * One adhan at a time. Subuh plays {@code res/raw/adhan_fajr}; the other prayers play {@code res/raw/adhan}.
+ * One adhan at a time. Subuh plays {@code res/raw/adzan_subuh}; the other prayers play
+ * {@code res/raw/adzan_selain_subuh_mecca}.
  * A file the user picked on the TV replaces that slot when it can be opened.
  */
 final class AdhanPlayer {
@@ -149,7 +150,7 @@ final class AdhanPlayer {
             mp.setDataSource(file.getAbsolutePath());
             return;
         }
-        int res = which == AdhanCue.FAJR ? R.raw.adhan_fajr : R.raw.adhan;
+        int res = which == AdhanCue.FAJR ? R.raw.adzan_subuh : R.raw.adzan_selain_subuh_mecca;
         try (AssetFileDescriptor afd = app.getResources().openRawResourceFd(res)) {
             mp.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
         }

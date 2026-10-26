@@ -429,7 +429,7 @@ final class Editor {
         if ("master".equals(tag)) {
             HomePrefs.setAdhanOn(activity, !HomePrefs.adhanOn(activity));
             activity.rescheduleAdhan();
-            flash(HomePrefs.adhanOn(activity) ? "Adzan hidup" : "Adzan mati");
+            flash(HomePrefs.adhanOn(activity) ? "Suara adzan hidup" : "Suara adzan mati");
             show();
             return;
         }
@@ -623,7 +623,7 @@ final class Editor {
                 out.add(new Item("Wallpaper", wallLabel()));
                 out.add(new Item("Lokasi", HomePrefs.place(activity).name));
                 out.add(new Item("Tata letak baris", ""));
-                out.add(new Item("Adzan & alarm", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati"));
+                out.add(new Item("Suara adzan", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati"));
                 out.add(new Item("Waktu salat & koreksi", ""));
                 out.add(new Item("Tutup", ""));
                 break;
@@ -699,7 +699,7 @@ final class Editor {
                 out.add(new Item("Kembali", ""));
                 break;
             case ADHAN:
-                out.add(new Item("Adzan", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati", "master"));
+                out.add(new Item("Suara adzan", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati", "master"));
                 for (int p : AdhanCue.PRAYERS) {
                     out.add(new Item(AdhanCue.label(p), HomePrefs.adhanPrayer(activity, p) ? "Hidup" : "Mati", "p" + p));
                 }
@@ -809,7 +809,7 @@ final class Editor {
             case ROWS:
                 return "Tata letak";
             case ADHAN:
-                return "Adzan & alarm";
+                return "Suara adzan";
             default:
                 return "Sunting WidgeTV";
         }
