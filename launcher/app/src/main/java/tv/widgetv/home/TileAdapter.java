@@ -38,6 +38,10 @@ final class TileAdapter extends RecyclerView.Adapter<TileAdapter.Holder> {
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_tile, parent, false);
+        if (cardWidth > 0) {
+            int pad = Math.round(24 * parent.getResources().getDisplayMetrics().density);
+            v.setLayoutParams(new RecyclerView.LayoutParams(cardWidth + pad, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
         Holder h = new Holder(v);
         LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) h.card.getLayoutParams();
         lp.height = cardHeight;

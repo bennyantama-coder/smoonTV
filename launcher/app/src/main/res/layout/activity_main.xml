@@ -11,6 +11,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <ImageView
+        android:id="@+id/custom_wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
     <ScrollView
         android:id="@+id/page"
         android:layout_width="match_parent"
@@ -243,6 +251,15 @@
                             android:textColor="@color/mist_400"
                             android:textSize="10sp" />
                     </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|center_horizontal"
+                        android:layout_marginBottom="2dp"
+                        android:text="Tahan OK / tekan Menu untuk mengatur tampilan"
+                        android:textColor="@color/mist_400"
+                        android:textSize="10sp" />
 
                     <!-- Slim dock: about 70% of the old tile height, about 240px side margins. -->
                     <FrameLayout
