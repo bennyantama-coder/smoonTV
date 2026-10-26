@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Every personal choice lives in this one file.
-  Edit it, then run tools/build-install.sh. Nothing else in the launcher needs to change.
+  Defaults live in this file. On the TV, hold OK to edit the dock, wallpaper, city, and
+  widget rows; those choices are stored on the device and override this file until the app is cleared.
+  Edit it, then run tools/build-install.sh, only when you want a new default APK.
 
   The values shipped here are the example used for the screenshots in docs/screenshots:
   Padang, Asia/Jakarta, Singapore method, Shafi Asr; second clock disabled.
 -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="primary_zone" translatable="false">Asia/Jakarta</string>
 
     <!-- ============================================================ prayer times -->
@@ -83,10 +84,9 @@
         <item>com.google.android.youtube</item>
     </string-array>
 
-    <!-- Never shown in the app grid. List the dock apps again so the grid stays clean if one is
-         later dropped from the dock. The launcher itself is always hidden.
-         Packages that are not installed are ignored, so leftovers are harmless. -->
-    <string-array name="hidden_packages" translatable="false">
+    <!-- Kept as a note of the original dock. The grid hides whatever is in the live dock, so an app
+         removed on the TV shows up in the grid again. The launcher itself is always hidden. -->
+    <string-array name="hidden_packages" translatable="false" tools:ignore="UnusedResources">
         <item>com.netflix.ninja</item>
         <item>com.netflix.mediaclient</item>
         <item>com.google.android.youtube.tv</item>

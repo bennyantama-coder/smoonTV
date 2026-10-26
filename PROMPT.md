@@ -1,5 +1,10 @@
 # The prompt
 
+**Edisi SMOON / Padang:** jangan jalankan debloat, jangan menonaktifkan aplikasi sistem, dan jangan
+menjadikan WidgeTV sebagai Home bawaan. Pasang sebagai aplikasi biasa dan sunting dari remote
+(tahan OK). Panduan pemakaian ada di [PANDUAN-SMOON.md](PANDUAN-SMOON.md). Prompt di bawah ini adalah
+alur upstream dan bukan langkah untuk TV ini.
+
 *Builds on [cleanyourtv](https://github.com/Gathin23/cleanyourtv) by Gathin (the debloat-and-launcher
 workflow) and [Afnon](https://github.com/egyjs/afnon-android-tv-launcher) by egyjs (prayer logic and the
 lapis-and-gold look). Both MIT.*

@@ -6,13 +6,16 @@ import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -46,11 +49,13 @@ import android.widget.TextView;
 
 import androidx.annotation.RequiresApi;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,12 +70,17 @@ import java.util.concurrent.Executors;
  * The home screen. The activity owns the D-pad completely: nothing is focusable, focus
  * is a (zone, index) pair, and one gold ring (GlassHighlight) springs to whatever that points at.
  * Zones top to bottom: pills (TOP), prayer timeline (or, with prayer_enabled=false, the clock header),
- * dock, grid; plus the Inputs dropdown and the settings panel as modal zones. Everything time-based
- * updates on ACTION_TIME_TICK only. Every user choice comes from res/values/config.xml (Config).
+ * dock, grid; plus the Inputs dropdown and the settings panel as modal zones. Hold OK to open the
+ * on-TV editor (dock, wallpaper, city, widget rows, adhan alarm), which is stored in HomePrefs. Everything time-based
+ * updates on ACTION_TIME_TICK only. Defaults come from res/values/config.xml (Config).
  */
 public class MainActivity extends Activity {
     private static final String TAG = Config.TAG;
     private static final int COLS = 4;
+    static final int REQ_WALL = 4101;
+    static final int REQ_READ = 4102;
+    static final int REQ_ADHAN_FAJR = 4103;
+    static final int REQ_ADHAN_OTHER = 4104;
     /** Debug broadcast action: "<applicationId>.DEBUG_SKY". */
     private String debugAction() {
         return getPackageName() + ".DEBUG_SKY";
@@ -103,7 +113,6 @@ public class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private AppLoader loader;
     private List<String> lastSignature;   // io thread only
-    private List<String> dockPackages, hiddenPackages;
     private SharedPreferences prefs;
     private Weather weather;
     private PrayerDay day;
@@ -113,7 +122,18 @@ public class MainActivity extends Activity {
     private LocalDate fakeDate;
     private Thoughts thoughts;
     private View hereWeather, thought;
-    private ImageView awayFlag;
+    private ImageView awayFlag, wallpaper;
+    private View wallScrim;
+    private TextView weatherCity, editHint, adhanBanner;
+    private Editor editor;
+    private int wallGen;
+    private boolean okLong;
+    /** The OK release that opened the editor must not activate the first row. */
+    private boolean swallowOkUp;
+    private final Runnable okLongRunnable = () -> {
+        okLong = true;
+        openEditor();
+    };
     private TextView hereTemp, awayTemp, awayRange, thoughtTag, thoughtText, thoughtSource;
     private LocalDate shownThoughtDate;
     private Config cfg;
@@ -137,6 +157,11 @@ public class MainActivity extends Activity {
         ssid = findViewById(R.id.ssid);
         hereWeather = findViewById(R.id.here_weather);
         hereTemp = findViewById(R.id.here_temp);
+        weatherCity = findViewById(R.id.weather_city);
+        wallpaper = findViewById(R.id.wallpaper);
+        wallScrim = findViewById(R.id.wallpaper_scrim);
+        editHint = findViewById(R.id.edit_hint);
+        adhanBanner = findViewById(R.id.adhan_banner);
         awayFlag = findViewById(R.id.away_flag);
         awayTemp = findViewById(R.id.away_temp);
         awayRange = findViewById(R.id.away_range);
@@ -162,11 +187,9 @@ public class MainActivity extends Activity {
         panel = findViewById(R.id.panel);
         pills = new ImageView[]{findViewById(R.id.btn_inputs), findViewById(R.id.btn_wifi),
                 findViewById(R.id.btn_settings)};
-        dockPackages = Arrays.asList(getResources().getStringArray(R.array.dock_packages));
-        hiddenPackages = Arrays.asList(getResources().getStringArray(R.array.hidden_packages));
         weather = new Weather(this);
-        applyClockFont();
-        applyTextSize();
+        weatherCity.setText(HomePrefs.place(this).name);
+        editHint.setVisibility(HomePrefs.hintPending(this) ? View.VISIBLE : View.GONE);
 
         Rect window = windowBounds();
         firstScreenH = window.height();
@@ -179,8 +202,33 @@ public class MainActivity extends Activity {
         int dockH = Math.round(cardH * 0.7f);
         dockAdapter = new TileAdapter(dockH * 16 / 9, dockH);
         gridAdapter = new TileAdapter(-1, cardH);
-        setUpList(dockList = findViewById(R.id.dock), dockAdapter);
+        dockList = findViewById(R.id.dock);
+        dockList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        dockList.setItemAnimator(null);
+        dockList.setNestedScrollingEnabled(false);
+        dockList.setFocusable(false);
+        dockList.setAdapter(dockAdapter);
         setUpList(gridList = findViewById(R.id.grid), gridAdapter);
+        editor = new Editor(this);
+        ((FrameLayout) findViewById(R.id.root)).addView(editor.view(), new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        AdhanPlayer.setUi(new AdhanPlayer.Ui() {
+            @Override
+            public void onPlaying(int prayer, boolean preview) {
+                if (isDestroyed()) return;
+                showAdhanBanner(prayer);
+            }
+
+            @Override
+            public void onStopped() {
+                if (isDestroyed()) return;
+                adhanBanner.setVisibility(View.GONE);
+            }
+        });
+        if (AdhanPlayer.playing()) showAdhanBanner(AdhanPlayer.activePrayer());
+        AdhanScheduler.schedule(this);
+        applyWidgets();
+        showWallpaper();
 
         prefs = getSharedPreferences("focus", MODE_PRIVATE);
         try {
@@ -226,15 +274,25 @@ public class MainActivity extends Activity {
         register(timeReceiver, timeFilter, false);
         updateClock(); // also the weather stale check
         loadApps(false);
+        if (AdhanPlayer.playing()) showAdhanBanner(AdhanPlayer.activePrayer());
+        AdhanScheduler.schedule(this);
+    }
+
+    private void showAdhanBanner(int prayer) {
+        if (!AdhanCue.isPrayer(prayer)) return;
+        adhanBanner.setText("Adzan " + AdhanCue.label(prayer) + " · OK hentikan");
+        adhanBanner.setVisibility(View.VISIBLE);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         resumed = false;
+        if (AdhanPlayer.previewing()) AdhanPlayer.stop(this);
         unregisterReceiver(timeReceiver);
+        main.removeCallbacks(okLongRunnable);
         if (zone == Zone.MENU) closeMenu();
-        if (zone == Zone.PANEL) closePanel();
+        if (zone == Zone.PANEL && (editor == null || !editor.isOpen())) closePanel();
         String pkg = focusedPkg();
         prefs.edit().putString("zone", zone.name()).putInt("pill", pillIdx).putString("pkg", pkg).apply();
     }
@@ -262,6 +320,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        main.removeCallbacks(okLongRunnable);
+        if (AdhanPlayer.previewing()) AdhanPlayer.stop(this);
+        AdhanPlayer.setUi(null);
         super.onDestroy();
         unregisterReceiver(packageReceiver);
         if (BuildConfig.DEBUG) unregisterReceiver(debugReceiver);
@@ -273,19 +334,20 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- apps
 
     private void loadApps(boolean force) {
+        List<String> dockOrder = HomePrefs.dockPackages(this);
         io.execute(() -> {
             Map<String, AppLoader.Candidate> found = loader.query();
             List<String> sig = new ArrayList<>();
             for (AppLoader.Candidate c : found.values()) sig.add(c.key());
+            sig.addAll(dockOrder);
             if (!force && sig.equals(lastSignature)) return;
             lastSignature = sig;
 
             List<AppEntry> dock = new ArrayList<>();
-            for (String pkg : dockPackages) {
+            for (String pkg : dockOrder) {
                 AppLoader.Candidate c = found.remove(pkg);
                 if (c != null) dock.add(loader.entry(c));
             }
-            for (String pkg : hiddenPackages) found.remove(pkg);
             List<AppEntry> grid = new ArrayList<>();
             for (AppLoader.Candidate c : found.values()) grid.add(loader.entry(c));
             grid.sort((a, b) -> a.label.compareToIgnoreCase(b.label));
@@ -296,18 +358,25 @@ public class MainActivity extends Activity {
     private void applyApps(List<AppEntry> dock, List<AppEntry> grid) {
         String keep = pendingPkg != null ? pendingPkg : focusedPkg();
         pendingPkg = null;
-        dockAdapter.setItems(dock);
-        gridAdapter.setItems(grid);
         int i = indexOf(dock, keep);
         if (i >= 0) dockIdx = i;
         int g = indexOf(grid, keep);
         if (g >= 0) gridIdx = g;
         dockIdx = clamp(dockIdx, dock.size());
         gridIdx = clamp(gridIdx, grid.size());
-        if (zone == Zone.GRID && grid.isEmpty()) zone = Zone.DOCK;
-        if (zone == Zone.DOCK && dock.isEmpty()) zone = Zone.TIMELINE;
-        dockAdapter.focused = zone == Zone.DOCK ? dockIdx : -1;
-        gridAdapter.focused = zone == Zone.GRID ? gridIdx : -1;
+        boolean editing = editor != null && editor.isOpen();
+        if (!editing) {
+            if (zone == Zone.GRID && grid.isEmpty()) zone = Zone.DOCK;
+            if (zone == Zone.DOCK && dock.isEmpty()) zone = prayerShown() ? Zone.TIMELINE : Zone.TOP;
+        }
+        dockAdapter.focused = !editing && zone == Zone.DOCK ? dockIdx : -1;
+        gridAdapter.focused = !editing && zone == Zone.GRID ? gridIdx : -1;
+        dockAdapter.setItems(dock);
+        gridAdapter.setItems(grid);
+        if (editing) {
+            Log.i(TAG, "apps: dock=" + dock.size() + " grid=" + grid.size());
+            return;
+        }
         if (zone == Zone.TOP) setLook(true);
         needScroll = true; // scroll + ring are placed by onLayoutChanged once the tiles exist
         Log.i(TAG, "apps: dock=" + dock.size() + " grid=" + grid.size());
@@ -342,6 +411,39 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent ev) {
         int code = ev.getKeyCode();
         boolean down = ev.getAction() == KeyEvent.ACTION_DOWN;
+        if (stopAdhanKey(code, down)) return true;
+        if (editor != null && editor.isOpen()) {
+            if (editor.typing()) {
+                if (!down && code == KeyEvent.KEYCODE_BACK) {
+                    editor.stopTyping();
+                    return true;
+                }
+                return super.dispatchKeyEvent(ev);
+            }
+            switch (code) {
+                case KeyEvent.KEYCODE_DPAD_UP:
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    if (down) editor.onDpad(code, ev.getRepeatCount());
+                    return true;
+                case KeyEvent.KEYCODE_DPAD_CENTER:
+                case KeyEvent.KEYCODE_ENTER:
+                case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                    if (!down && !ev.isCanceled()) {
+                        if (swallowOkUp) swallowOkUp = false;
+                        else editor.onOk();
+                    }
+                    return true;
+                case KeyEvent.KEYCODE_BACK:
+                case KeyEvent.KEYCODE_MENU:
+                case KeyEvent.KEYCODE_INFO:
+                    if (!down) editor.onBack();
+                    return true;
+                default:
+                    return super.dispatchKeyEvent(ev);
+            }
+        }
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -352,13 +454,32 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                if (!down && !ev.isCanceled()) select();
+                if (down) {
+                    if (ev.getRepeatCount() == 0) {
+                        okLong = false;
+                        main.removeCallbacks(okLongRunnable);
+                        main.postDelayed(okLongRunnable, 550);
+                    }
+                } else {
+                    main.removeCallbacks(okLongRunnable);
+                    if (!ev.isCanceled() && !okLong) select();
+                }
+                return true;
+            case KeyEvent.KEYCODE_MENU:
+            case KeyEvent.KEYCODE_INFO:
+                if (!down) openEditor();
                 return true;
             case KeyEvent.KEYCODE_BACK:
-                // Home never goes "back"; Back only closes the dropdown or the panel.
-                if (!down && zone == Zone.MENU) closeMenu();
-                if (!down && zone == Zone.PANEL) closePanel();
-                return true;
+                // Not the stock Home app: Back leaves WidgeTV unless a menu or the prayer panel is open.
+                if (!down && zone == Zone.MENU) {
+                    closeMenu();
+                    return true;
+                }
+                if (!down && zone == Zone.PANEL) {
+                    closePanel();
+                    return true;
+                }
+                return super.dispatchKeyEvent(ev);
             default:
                 return super.dispatchKeyEvent(ev);
         }
@@ -372,7 +493,7 @@ public class MainActivity extends Activity {
             case TOP:
                 if (left && pillIdx > 0) focus(Zone.TOP, pillIdx - 1, true);
                 else if (right && pillIdx < pills.length - 1) focus(Zone.TOP, pillIdx + 1, true);
-                else if (dn) focus(Zone.TIMELINE, 0, true);
+                else if (dn) focusDownFromTop();
                 break;
             case TIMELINE:
                 if (up) focus(Zone.TOP, pillIdx, true);
@@ -382,7 +503,7 @@ public class MainActivity extends Activity {
             case DOCK:
                 if (left && dockIdx > 0) focus(Zone.DOCK, dockIdx - 1, true);
                 else if (right && dockIdx < dockN - 1) focus(Zone.DOCK, dockIdx + 1, true);
-                else if (up) focus(Zone.TIMELINE, 0, true);
+                else if (up) focusUpFromDock();
                 else if (dn && gridN > 0) focus(Zone.GRID, Math.min(dockIdx, gridN - 1), true);
                 break;
             case GRID: {
@@ -391,7 +512,8 @@ public class MainActivity extends Activity {
                 else if (right && col < COLS - 1 && gridIdx + 1 < gridN) focus(Zone.GRID, gridIdx + 1, true);
                 else if (up && row > 0) focus(Zone.GRID, gridIdx - COLS, true);
                 else if (up && dockN > 0) focus(Zone.DOCK, clamp(dockIdx, dockN), true); // last focused dock tile
-                else if (up) focus(Zone.TIMELINE, 0, true);
+                else if (up && prayerShown()) focus(Zone.TIMELINE, 0, true);
+                else if (up) focus(Zone.TOP, pillIdx, true);
                 else if (dn && gridIdx + COLS < gridN) focus(Zone.GRID, gridIdx + COLS, true);
                 else if (dn && (row + 1) * COLS < gridN) focus(Zone.GRID, gridN - 1, true); // short last row
                 break;
@@ -459,6 +581,9 @@ public class MainActivity extends Activity {
         dockAdapter.focused = z == Zone.DOCK ? dockIdx : -1;
         gridAdapter.focused = z == Zone.GRID ? gridIdx : -1;
         setLook(true);
+        if (z == Zone.DOCK && dockList.getLayoutManager() instanceof LinearLayoutManager) {
+            ((LinearLayoutManager) dockList.getLayoutManager()).scrollToPositionWithOffset(dockIdx, dp(24));
+        }
         scrollToZone(animate);
         updateGlass(animate);
     }
@@ -615,8 +740,9 @@ public class MainActivity extends Activity {
     private void openPanel() {
         panel.removeAllViews();
         LinearLayout title = new LinearLayout(this);
+        String city = HomePrefs.place(this).name;
         String titleText = cfg.prayerEnabled
-                ? getString(R.string.prayer_settings) + (cfg.cityLabel.isEmpty() ? "" : "  ·  " + cfg.cityLabel)
+                ? getString(R.string.prayer_settings) + (city.isEmpty() ? "" : "  ·  " + city)
                 : getString(R.string.display_settings);
         title.addView(rowText(titleText, 15, Lapis.GOLD_400),
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
@@ -708,6 +834,7 @@ public class MainActivity extends Activity {
         }
         refreshPrayer();
         renderPanel();
+        AdhanScheduler.schedule(this);
         Log.i(TAG, "prayer settings: hanafi=" + PrayerPrefs.hanafi(this) + " method="
                 + PrayerPrefs.METHODS[PrayerPrefs.methodIndex(this)] + " offsets=" + Arrays.toString(PrayerPrefs.offsets(this))
                 + " clockFont=" + PrayerPrefs.CLOCK_FONTS[PrayerPrefs.clockFont(this)]
@@ -727,9 +854,13 @@ public class MainActivity extends Activity {
      * "Now" for everything on screen. Debug builds can fake it (adb fake_time / fake_date) for a day
      * simulation; the TV's real clock and zone are never touched. Release builds always use the real clock.
      */
+    private ZoneId zone() {
+        return HomePrefs.zone(this);
+    }
+
     private long nowMillis() {
         if (fakeMinutes < 0 && fakeDate == null) return System.currentTimeMillis();
-        ZoneId zone = cfg.primaryZone;
+        ZoneId zone = zone();
         java.time.LocalDate d = fakeDate != null ? fakeDate : java.time.LocalDate.now(zone);
         java.time.LocalTime t = fakeMinutes >= 0 ? java.time.LocalTime.of(fakeMinutes / 60, fakeMinutes % 60)
                 : java.time.LocalTime.now(zone);
@@ -737,7 +868,7 @@ public class MainActivity extends Activity {
     }
 
     private ZonedDateTime nowZoned() {
-        return java.time.Instant.ofEpochMilli(nowMillis()).atZone(cfg.primaryZone);
+        return java.time.Instant.ofEpochMilli(nowMillis()).atZone(zone());
     }
 
     /** Clocks + prayer day + date line + thought, without the weather stale check. */
@@ -751,7 +882,38 @@ public class MainActivity extends Activity {
         ZonedDateTime local = nowZoned();
         clock.setText(hm(local, h24));
         refreshPrayer(); // also redraws the date line and the second-clock line
+        maybeAdhan();
         weather.maybeFetch(false, this::renderDateAndWeather);
+    }
+
+    /** Backup for the alarm while this screen is open. The claim stops a second play in the same minute. */
+    private void maybeAdhan() {
+        if (!resumed || day == null || !cfg.prayerEnabled || !HomePrefs.adhanOn(this)) return;
+        if (fakeMinutes >= 0 || fakeDate != null) return;
+        long now = System.currentTimeMillis();
+        int prayer = AdhanCue.due(now, day.times, AdhanCue.GRACE_MS);
+        if (!AdhanCue.isPrayer(prayer) || !HomePrefs.adhanPrayer(this, prayer)) return;
+        long when = day.times[prayer];
+        if (!HomePrefs.claimAdhan(this, AdhanCue.stamp(prayer, when))) return;
+        AdhanScheduler.play(this, prayer, when);
+        AdhanScheduler.schedule(this);
+    }
+
+    /** OK or Back stops the adhan. Inside the editor, OK still chooses a row and Back stops first. */
+    private boolean stopAdhanKey(int code, boolean down) {
+        if (!AdhanPlayer.playing()) return false;
+        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        boolean back = code == KeyEvent.KEYCODE_BACK;
+        if (!ok && !back) return false;
+        if (editor != null && editor.isOpen() && ok) return false;
+        if (down) {
+            main.removeCallbacks(okLongRunnable);
+            okLong = true;
+            return true;
+        }
+        AdhanPlayer.stop(this);
+        return true;
     }
 
     /** "12:30" (or "00:30" in 24-hour mode), no AM/PM. */
@@ -767,7 +929,7 @@ public class MainActivity extends Activity {
     }
 
     private String clockText(long millis) {
-        return hmAmPm(java.time.Instant.ofEpochMilli(millis).atZone(cfg.primaryZone), DateFormat.is24HourFormat(this));
+        return hmAmPm(java.time.Instant.ofEpochMilli(millis).atZone(zone()), DateFormat.is24HourFormat(this));
     }
 
     /**
@@ -780,9 +942,8 @@ public class MainActivity extends Activity {
      */
     private void applyTextSize() {
         int l = PrayerPrefs.textSize(this);
-        float[] hereT = {24, 28, 32}, dateT = {14, 16, 18}, awayT = {22, 26, 30}, awayR = {10, 13, 15},
-                times = {15, 17, 19}, names = {11, 13, 15}, tag = {10, 11, 12}, text = {19, 21, 23}, src = {10, 12, 14};
-        hereTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, hereT[l]);
+        float[] dateT = {14, 16, 18}, awayT = {22, 26, 30}, awayR = {10, 13, 15};
+        // Weather and the clock are sized again in applyWidgetChrome.
         date.setTextSize(TypedValue.COMPLEX_UNIT_SP, dateT[l]);
         awayClock.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayT[l]);
         awayTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, awayT[l]);
@@ -792,17 +953,83 @@ public class MainActivity extends Activity {
         fl.width = dp(11 * flag);
         fl.height = dp(7.5f * flag);
         awayFlag.setLayoutParams(fl);
-        int timelineDp = Math.max(76, timeline.setTextScale(times[l], names[l]));
+        applyWidgetChrome();
+        if (day != null) renderDateAndWeather();
+    }
+
+    /** Per-widget size from the on-TV editor. Clock was previously fixed; the others override the global text step. */
+    private void applyWidgetChrome() {
+        int clockS = HomePrefs.size(this, HomePrefs.CLOCK);
+        float[] clockSp = {58f, 75f, 104f};
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, clockSp[clockS]);
+        int weatherS = HomePrefs.size(this, HomePrefs.WEATHER);
+        float[] weatherSp = {18f, 24f, 34f};
+        hereTemp.setTextSize(TypedValue.COMPLEX_UNIT_SP, weatherSp[weatherS]);
+        weatherCity.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(13f, weatherSp[weatherS] - 8f));
+        int prayerS = HomePrefs.size(this, HomePrefs.PRAYER);
+        float[] prayerTimes = {13f, 15f, 20f};
+        float[] prayerNames = {10f, 11f, 15f};
+        int timelineDp = Math.max(64, timeline.setTextScale(prayerTimes[prayerS], prayerNames[prayerS]));
         timeline.getLayoutParams().height = dp(timelineDp);
         timeline.requestLayout();
-        FrameLayout.LayoutParams tp = (FrameLayout.LayoutParams) thought.getLayoutParams();
-        // Below the timeline; without prayer times the thought takes the timeline's place.
-        tp.topMargin = cfg.prayerEnabled ? dp(178 + timelineDp + 12) : dp(214);
-        thought.setLayoutParams(tp);
-        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, tag[l]);
-        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, text[l]);
-        thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, src[l]);
-        if (day != null) renderDateAndWeather();
+        int quoteS = HomePrefs.size(this, HomePrefs.QUOTE);
+        float[] tag = {10f, 10f, 12f};
+        float[] text = {16f, 19f, 26f};
+        float[] src = {10f, 10f, 13f};
+        thoughtTag.setTextSize(TypedValue.COMPLEX_UNIT_SP, tag[quoteS]);
+        thoughtText.setTextSize(TypedValue.COMPLEX_UNIT_SP, text[quoteS]);
+        thoughtSource.setTextSize(TypedValue.COMPLEX_UNIT_SP, src[quoteS]);
+    }
+
+    /** Reorder and show or hide the four widget rows. The dock stays pinned to the bottom. */
+    private void applyWidgets() {
+        LinearLayout rows = findViewById(R.id.rows);
+        rows.removeAllViews();
+        for (String id : HomePrefs.rowOrder(this)) {
+            View v = widgetView(id);
+            if (v == null) continue;
+            boolean on = HomePrefs.visible(this, id);
+            if (HomePrefs.PRAYER.equals(id) && !cfg.prayerEnabled) on = false;
+            if (HomePrefs.QUOTE.equals(id) && !cfg.thoughtsEnabled) on = false;
+            if (HomePrefs.WEATHER.equals(id) && !cfg.weatherEnabled) on = false;
+            v.setVisibility(on ? View.VISIBLE : View.GONE);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (HomePrefs.PRAYER.equals(id)) lp.topMargin = dp(14);
+            if (HomePrefs.WEATHER.equals(id)) lp.topMargin = dp(2);
+            if (HomePrefs.QUOTE.equals(id)) {
+                lp.topMargin = dp(16);
+                lp.leftMargin = dp(80);
+                lp.rightMargin = dp(80);
+            }
+            rows.addView(v, lp);
+        }
+        if (!prayerShown() && zone == Zone.TIMELINE) zone = Zone.TOP;
+        applyClockFont();
+        applyTextSize();
+    }
+
+    private View widgetView(String id) {
+        if (HomePrefs.CLOCK.equals(id)) return header;
+        if (HomePrefs.WEATHER.equals(id)) return hereWeather;
+        if (HomePrefs.PRAYER.equals(id)) return timeline;
+        if (HomePrefs.QUOTE.equals(id)) return thought;
+        return null;
+    }
+
+    private boolean prayerShown() {
+        return cfg.prayerEnabled && HomePrefs.visible(this, HomePrefs.PRAYER);
+    }
+
+    private void focusDownFromTop() {
+        if (prayerShown()) focus(Zone.TIMELINE, 0, true);
+        else if (dockAdapter.getItemCount() > 0) focus(Zone.DOCK, clamp(dockIdx, dockAdapter.getItemCount()), true);
+        else if (gridAdapter.getItemCount() > 0) focus(Zone.GRID, clamp(gridIdx, gridAdapter.getItemCount()), true);
+    }
+
+    private void focusUpFromDock() {
+        if (prayerShown()) focus(Zone.TIMELINE, 0, true);
+        else focus(Zone.TOP, pillIdx, true);
     }
 
     private void applyClockFont() {
@@ -847,27 +1074,29 @@ public class MainActivity extends Activity {
         awayClock.setText(weekday + hmAmPm(away, h24));
 
         SpannableStringBuilder sb = new SpannableStringBuilder();
-        append(sb, DateFormat.format("EEEE d MMMM", nowMillis()), Lapis.PLASTER_100);
+        append(sb, local.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault())), Lapis.PLASTER_100);
         if (cfg.prayerEnabled) {
             append(sb, "   ·   ", Lapis.MIST_400);
             append(sb, day.hijri(), Lapis.GOLD_400);
         }
-        if (w != null && w[0].hasRange) {
+        boolean showWeather = cfg.weatherEnabled && HomePrefs.visible(this, HomePrefs.WEATHER);
+        weatherCity.setText(HomePrefs.place(this).name);
+        if (w != null && w[0].hasRange && showWeather) {
             append(sb, "   ·   ", Lapis.MIST_400);
             sb.append(rangeText(w[0], Lapis.MIST_400));
         }
         date.setText(sb);
 
-        // Weather sits beside each clock; hidden entirely (no gap) when never fetched or older than 3 h.
+        // Away weather stays beside the second clock. The home-city row is shown or hidden by applyWidgets.
         boolean awayW = w != null && w.length > 1;
-        hereWeather.setVisibility(w == null ? View.GONE : View.VISIBLE);
         awayTemp.setVisibility(awayW ? View.VISIBLE : View.GONE);
         awayRange.setVisibility(awayW && w[1].hasRange ? View.VISIBLE : View.GONE);
-        if (w == null) return;
-        hereTemp.setText(tempText(w[0], Lapis.PLASTER_100, hereTemp.getTextSize()));
-        if (!awayW) return;
-        awayTemp.setText(tempText(w[1], Lapis.MIST_400, awayTemp.getTextSize()));
-        awayRange.setText(rangeText(w[1], Lapis.alpha(Lapis.MIST_400, 0.7f)));
+        if (awayW) {
+            awayTemp.setText(tempText(w[1], Lapis.MIST_400, awayTemp.getTextSize()));
+            awayRange.setText(rangeText(w[1], Lapis.alpha(Lapis.MIST_400, 0.7f)));
+        }
+        if (!showWeather) return;
+        hereTemp.setText(w == null ? "…" : tempText(w[0], Lapis.PLASTER_100, hereTemp.getTextSize()));
     }
 
     /** "[icon] 32°" */
@@ -894,12 +1123,11 @@ public class MainActivity extends Activity {
 
     /** Thought of the day; the pick only changes when the date (in the TV's time zone) changes. */
     private void renderThought() {
-        if (!cfg.thoughtsEnabled) {
+        if (!cfg.thoughtsEnabled || !HomePrefs.visible(this, HomePrefs.QUOTE)) {
             thought.setVisibility(View.GONE);
             return;
         }
-        LocalDate today = fakeDate != null ? fakeDate
-                : java.time.Instant.ofEpochMilli(nowMillis()).atZone(cfg.primaryZone).toLocalDate();
+        LocalDate today = fakeDate != null ? fakeDate : nowZoned().toLocalDate();
         if (today.equals(shownThoughtDate)) return;
         Thoughts.Thought t = thoughts.pick(today);
 
@@ -1050,6 +1278,234 @@ public class MainActivity extends Activity {
         if (ssid == null || ssid.equals(WifiManager.UNKNOWN_SSID)) return getString(R.string.wifi);
         ssid = ssid.replaceAll("^\"|\"$", "");
         return ssid.isEmpty() ? getString(R.string.wifi) : ssid;
+    }
+
+    // ---------------------------------------------------------------- on-TV editor
+
+    private void openEditor() {
+        if (editor.isOpen()) return;
+        if (zone == Zone.MENU) closeMenu();
+        if (zone == Zone.PANEL) closePanel();
+        HomePrefs.markHintSeen(this);
+        editHint.setVisibility(View.GONE);
+        glass.setVisibility(View.INVISIBLE);
+        swallowOkUp = true;
+        editor.open();
+    }
+
+    void editorClosed() {
+        swallowOkUp = false;
+        if (!prayerShown() && zone == Zone.TIMELINE) zone = Zone.TOP;
+        glass.setVisibility(View.VISIBLE);
+        setLook(true);
+        needScroll = true;
+        updateGlass(false);
+    }
+
+    void editorReloadDock() {
+        loadApps(true);
+    }
+
+    void editorReloadPlace() {
+        Place p = HomePrefs.place(this);
+        weather.relocate(p.lat, p.lng);
+        weatherCity.setText(p.name);
+        weather.maybeFetch(true, this::renderDateAndWeather);
+        updateClock();
+        AdhanScheduler.schedule(this);
+    }
+
+    void editorReloadWallpaper() {
+        showWallpaper();
+    }
+
+    void editorReloadLayout() {
+        applyWidgets();
+    }
+
+    void editorOpenPrayer() {
+        editor.close();
+        openPanel();
+    }
+
+    void rescheduleAdhan() {
+        AdhanScheduler.schedule(this);
+    }
+
+    void previewAdhan(int prayer) {
+        AdhanPlayer.play(this, prayer, true, null);
+    }
+
+    void editorPickAdhan(boolean fajr) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("audio/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, fajr ? REQ_ADHAN_FAJR : REQ_ADHAN_OTHER);
+        } catch (ActivityNotFoundException e) {
+            editor.flash("Files tidak ada di TV ini");
+        }
+    }
+
+    void editorPickImage() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQ_WALL);
+        } catch (ActivityNotFoundException e) {
+            editor.flash("Files tidak ada di TV ini. Tempel URL gambar.");
+        }
+    }
+
+    void downloadWallpaper(String url) {
+        runIo(() -> {
+            String err = WallpaperStore.download(getApplicationContext(), url);
+            runMain(() -> {
+                if (editor == null) return;
+                if (err != null) {
+                    editor.flash(err);
+                    return;
+                }
+                HomePrefs.setWallpaperUrl(this, url.trim());
+                showWallpaper();
+                editor.flash("Wallpaper dari URL tersimpan");
+            });
+        });
+    }
+
+    List<AppEntry> editorApps() {
+        ArrayList<AppEntry> all = new ArrayList<>();
+        all.addAll(dockAdapter.items);
+        all.addAll(gridAdapter.items);
+        all.sort((a, b) -> a.label.compareToIgnoreCase(b.label));
+        return all;
+    }
+
+    String editorAppLabel(String pkg) {
+        for (AppEntry e : dockAdapter.items) if (e.pkg().equals(pkg)) return e.label;
+        for (AppEntry e : gridAdapter.items) if (e.pkg().equals(pkg)) return e.label;
+        return null;
+    }
+
+    void runIo(Runnable r) {
+        io.execute(r);
+    }
+
+    void runMain(Runnable r) {
+        main.post(() -> {
+            if (!isDestroyed()) r.run();
+        });
+    }
+
+    private void showWallpaper() {
+        String mode = HomePrefs.wallpaperMode(this);
+        int gen = ++wallGen;
+        if ("sky".equals(mode)) {
+            recycleWallpaper();
+            wallpaper.setImageDrawable(null);
+            wallpaper.setVisibility(View.GONE);
+            wallScrim.setVisibility(View.GONE);
+            sky.setVisibility(View.VISIBLE);
+            return;
+        }
+        io.execute(() -> {
+            Bitmap bmp = WallpaperStore.decode(getApplicationContext());
+            main.post(() -> {
+                if (isDestroyed() || gen != wallGen) {
+                    if (bmp != null) bmp.recycle();
+                    return;
+                }
+                if (bmp == null) {
+                    wallpaper.setVisibility(View.GONE);
+                    wallScrim.setVisibility(View.GONE);
+                    sky.setVisibility(View.VISIBLE);
+                    if (editor != null && editor.isOpen()) editor.flash("Gambar wallpaper tidak ada. Langit dipakai lagi.");
+                    return;
+                }
+                recycleWallpaper();
+                wallpaper.setImageBitmap(bmp);
+                wallpaper.setVisibility(View.VISIBLE);
+                wallScrim.setVisibility(View.VISIBLE);
+                sky.setVisibility(View.GONE);
+            });
+        });
+    }
+
+    private void recycleWallpaper() {
+        Drawable prev = wallpaper.getDrawable();
+        wallpaper.setImageDrawable(null);
+        if (prev instanceof BitmapDrawable) {
+            Bitmap old = ((BitmapDrawable) prev).getBitmap();
+            if (old != null && !old.isRecycled()) old.recycle();
+        }
+    }
+
+    private void savePickedWallpaper(Uri uri) {
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+            // The picker still grants a temporary read for this result.
+        }
+        if (editor != null) editor.flash("Menyimpan gambar…");
+        io.execute(() -> {
+            String err = WallpaperStore.saveUri(getApplicationContext(), uri);
+            main.post(() -> {
+                if (editor == null) return;
+                if (err != null) {
+                    editor.flash(err);
+                    return;
+                }
+                HomePrefs.setWallpaperFile(this);
+                showWallpaper();
+                editor.flash("Wallpaper tersimpan di TV");
+            });
+        });
+    }
+
+    private void savePickedAdhan(Uri uri, boolean fajr) {
+        if (editor != null) editor.flash("Menyimpan rekaman…");
+        io.execute(() -> {
+            String err = AdhanFiles.save(getApplicationContext(), uri, fajr);
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (err != null) {
+                    if (editor != null) editor.flash(err);
+                    return;
+                }
+                HomePrefs.setAdhanFile(this, fajr, true);
+                if (editor != null) {
+                    editor.flash(fajr ? "Rekaman Subuh tersimpan" : "Rekaman salat lain tersimpan");
+                    editor.refresh();
+                }
+            });
+        });
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_ADHAN_FAJR || requestCode == REQ_ADHAN_OTHER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                savePickedAdhan(data.getData(), requestCode == REQ_ADHAN_FAJR);
+            } else if (editor != null) editor.flash("Tidak ada rekaman dipilih");
+            return;
+        }
+        if (requestCode != REQ_WALL) return;
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) savePickedWallpaper(data.getData());
+        else if (editor != null) editor.flash("Tidak ada gambar dipilih");
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_READ && editor != null) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            editor.onReadPermission(granted);
+        }
     }
 
     // ---------------------------------------------------------------- utils

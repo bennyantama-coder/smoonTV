@@ -121,6 +121,16 @@ Weather is fetched at runtime from <https://open-meteo.com>. Nothing is bundled.
 Weather data by [Open-Meteo.com](https://open-meteo.com/), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
+### Adhan recordings
+
+Two MP3 files supplied for this app are bundled unmodified under `launcher/app/src/main/res/raw/`.
+The earlier Wikimedia excerpts (Malmö Fajr and the Atcovi Commons file) are not included.
+
+**Subuh** — `adzan_subuh.mp3`. Played only at Fajr. It includes *as-salatu khayrun min an-nawm*.
+
+**Zuhur, Asar, Magrib, Isya** — `adzan_selain_subuh_mecca.mp3`. Mecca-style adhan without that line.
+The app chooses the file by resource name. Embedded ID3 titles are not read.
+
 ### Qur'an and hadith quotations
 
 `content/thoughts.json` contains short English quotations used as a thought of the day:

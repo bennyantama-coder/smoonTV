@@ -2,6 +2,7 @@
 <!-- The prayer sky sits behind one scrolling page. Nothing is focusable: MainActivity owns the D-pad
      and draws focus itself (gold ring / gold button), so navigation never depends on focus search. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/lapis_900">
@@ -10,6 +11,22 @@
         android:id="@+id/sky"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <ImageView
+        android:id="@+id/wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/wallpaper_scrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#660C1B33"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
 
     <ScrollView
         android:id="@+id/page"
@@ -39,43 +56,67 @@
                     android:layout_height="540dp"
                     android:clipChildren="false">
 
-                    <!-- Header: the local clock alone (level 1), then the date line. With prayer_enabled=false
-                         it is the focus target that opens Display settings. -->
+                    <!-- Widget rows stack from the top; the dock stays at the bottom. Order and size come from HomePrefs. -->
                     <LinearLayout
-                        android:id="@+id/header"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="top|start"
-                        android:layout_marginStart="52dp"
-                        android:layout_marginTop="18dp"
+                        android:id="@+id/widget_column"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:clipChildren="false"
-                        android:orientation="vertical">
+                        android:orientation="vertical"
+                        android:paddingEnd="56dp"
+                        android:paddingStart="52dp"
+                        android:paddingTop="16dp">
 
-                        <!-- Clock, and right of it on the same baseline the weather: icon + 32 deg, high/low under it. -->
                         <LinearLayout
-                            android:layout_width="wrap_content"
+                            android:id="@+id/rows"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:baselineAligned="true"
                             android:clipChildren="false"
-                            android:orientation="horizontal">
+                            android:orientation="vertical">
 
-                            <TextView
-                                android:id="@+id/clock"
-                                android:layout_width="wrap_content"
+                            <LinearLayout
+                                android:id="@+id/header"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:includeFontPadding="false"
-                                android:letterSpacing="-0.02"
-                                android:textColor="@color/plaster_100"
-                                android:textSize="75sp" />
+                                android:clipChildren="false"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/clock"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:includeFontPadding="false"
+                                    android:letterSpacing="-0.02"
+                                    android:textColor="@color/plaster_100"
+                                    android:textSize="75sp" />
+
+                                <TextView
+                                    android:id="@+id/date"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="4dp"
+                                    android:layout_marginTop="2dp"
+                                    android:fontFamily="@font/alexandria"
+                                    android:textColor="@color/plaster_100"
+                                    android:textSize="14sp" />
+                            </LinearLayout>
 
                             <LinearLayout
                                 android:id="@+id/here_weather"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="22dp"
-                                android:baselineAlignedChildIndex="0"
-                                android:orientation="vertical"
-                                android:visibility="gone">
+                                android:layout_marginTop="2dp"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/weather_city"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginEnd="12dp"
+                                    android:fontFamily="@font/alexandria"
+                                    android:textColor="@color/mist_400"
+                                    android:textSize="16sp" />
 
                                 <TextView
                                     android:id="@+id/here_temp"
@@ -85,17 +126,93 @@
                                     android:textColor="@color/plaster_100"
                                     android:textSize="24sp" />
                             </LinearLayout>
+
+                            <tv.widgetv.home.PrayerTimeline
+                                android:id="@+id/timeline"
+                                android:layout_width="match_parent"
+                                android:layout_height="76dp"
+                                android:layout_marginTop="14dp" />
+
+                            <LinearLayout
+                                android:id="@+id/thought"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="80dp"
+                                android:layout_marginStart="80dp"
+                                android:layout_marginTop="16dp"
+                                android:gravity="center_horizontal"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/thought_tag"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="@font/alexandria"
+                                    android:letterSpacing="0.22"
+                                    android:textAllCaps="true"
+                                    android:textColor="@color/gold_400"
+                                    android:textSize="10sp" />
+
+                                <TextView
+                                    android:id="@+id/thought_text"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:ellipsize="end"
+                                    android:fontFamily="@font/cormorant_garamond_italic"
+                                    android:gravity="center"
+                                    android:maxLines="2"
+                                    android:textColor="@color/plaster_100"
+                                    android:textSize="19sp" />
+
+                                <TextView
+                                    android:id="@+id/thought_source"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:fontFamily="@font/alexandria"
+                                    android:textColor="@color/mist_400"
+                                    android:textSize="10sp" />
+                            </LinearLayout>
                         </LinearLayout>
 
+                        <Space
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
                         <TextView
-                            android:id="@+id/date"
-                            android:layout_width="wrap_content"
+                            android:id="@+id/edit_hint"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="4dp"
-                            android:layout_marginTop="2dp"
+                            android:layout_marginBottom="6dp"
                             android:fontFamily="@font/alexandria"
-                            android:textColor="@color/plaster_100"
-                            android:textSize="14sp" />
+                            android:gravity="center"
+                            android:text="@string/edit_hint"
+                            android:textColor="@color/mist_400"
+                            android:textSize="12sp" />
+
+                        <FrameLayout
+                            android:id="@+id/dock_band"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="16dp"
+                            android:layout_marginEnd="64dp"
+                            android:layout_marginStart="68dp"
+                            android:background="@drawable/bg_band"
+                            android:clipChildren="false"
+                            android:paddingBottom="2dp"
+                            android:paddingEnd="8dp"
+                            android:paddingStart="8dp"
+                            android:paddingTop="0dp">
+
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/dock"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:clipChildren="false"
+                                android:overScrollMode="never" />
+                        </FrameLayout>
                     </LinearLayout>
 
                     <!-- Top right: icon buttons (SSID label appears left of them while Wi-Fi is focused),
@@ -190,83 +307,6 @@
                             android:textSize="10sp"
                             android:visibility="gone" />
                     </LinearLayout>
-
-                    <tv.widgetv.home.PrayerTimeline
-                        android:id="@+id/timeline"
-                        android:layout_width="match_parent"
-                        android:layout_height="76dp"
-                        android:layout_gravity="top"
-                        android:layout_marginEnd="56dp"
-                        android:layout_marginStart="56dp"
-                        android:layout_marginTop="178dp" />
-
-                    <!-- Thought of the day (res/raw/thoughts.json), centred between timeline and dock. -->
-                    <LinearLayout
-                        android:id="@+id/thought"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="top"
-                        android:layout_marginEnd="140dp"
-                        android:layout_marginStart="140dp"
-                        android:layout_marginTop="266dp"
-                        android:gravity="center_horizontal"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/thought_tag"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="@font/alexandria"
-                            android:letterSpacing="0.22"
-                            android:textAllCaps="true"
-                            android:textColor="@color/gold_400"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/thought_text"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:ellipsize="end"
-                            android:fontFamily="@font/cormorant_garamond_italic"
-                            android:gravity="center"
-                            android:maxLines="2"
-                            android:textColor="@color/plaster_100"
-                            android:textSize="19sp" />
-
-                        <TextView
-                            android:id="@+id/thought_source"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:fontFamily="@font/alexandria"
-                            android:textColor="@color/mist_400"
-                            android:textSize="10sp" />
-                    </LinearLayout>
-
-                    <!-- Slim dock: about 70% of the old tile height, about 240px side margins. -->
-                    <FrameLayout
-                        android:id="@+id/dock_band"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="bottom"
-                        android:layout_marginBottom="22dp"
-                        android:layout_marginEnd="120dp"
-                        android:layout_marginStart="120dp"
-                        android:background="@drawable/bg_band"
-                        android:clipChildren="false"
-                        android:paddingBottom="2dp"
-                        android:paddingEnd="8dp"
-                        android:paddingStart="8dp"
-                        android:paddingTop="0dp">
-
-                        <androidx.recyclerview.widget.RecyclerView
-                            android:id="@+id/dock"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:clipChildren="false"
-                            android:overScrollMode="never" />
-                    </FrameLayout>
                 </FrameLayout>
 
                 <TextView
@@ -317,4 +357,20 @@
                 android:layout_height="match_parent" />
         </FrameLayout>
     </ScrollView>
+
+    <TextView
+        android:id="@+id/adhan_banner"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/bg_menu"
+        android:fontFamily="@font/alexandria"
+        android:paddingBottom="8dp"
+        android:paddingEnd="18dp"
+        android:paddingStart="18dp"
+        android:paddingTop="8dp"
+        android:textColor="@color/gold_400"
+        android:textSize="16sp"
+        android:visibility="gone" />
 </FrameLayout>

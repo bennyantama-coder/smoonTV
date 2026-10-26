@@ -9,8 +9,19 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Weather only (Open-Meteo, no key), fetched while home is in front. The launcher's only network use. -->
+    <!-- Weather (Open-Meteo) and an optional wallpaper image URL. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Optional gallery/USB list. The Files picker works without these. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Prayer alarm. Exact alarms, a short playback service, and a new schedule after reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Android 11+ package visibility: without these the app grid is empty. -->
     <queries>
@@ -32,6 +43,7 @@
         android:banner="@drawable/banner"
         android:icon="@drawable/icon"
         android:label="@string/app_name"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Launcher">
 
         <activity
@@ -41,12 +53,30 @@
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:stateNotNeeded="true">
+            <!-- Leanback app only: it shows in the app list and does not replace the stock Home launcher. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.HOME" />
-                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".AdhanReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".AdhanService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>

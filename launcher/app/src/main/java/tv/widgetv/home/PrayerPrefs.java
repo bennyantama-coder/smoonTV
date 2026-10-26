@@ -7,6 +7,8 @@ import com.batoulapps.adhan.CalculationMethod;
 import com.batoulapps.adhan.Coordinates;
 import com.batoulapps.adhan.Madhab;
 
+import java.time.ZoneId;
+
 /**
  * Prayer settings chosen on the TV (SharedPreferences "prayer"). Every value starts from
  * res/values/config.xml (see Config) until it is changed in the Prayer settings panel.
@@ -35,8 +37,12 @@ final class PrayerPrefs {
     }
 
     static Coordinates where(Context c) {
-        Config cfg = Config.get(c);
-        return new Coordinates(cfg.lat, cfg.lng);
+        Place p = HomePrefs.place(c);
+        return new Coordinates(p.lat, p.lng);
+    }
+
+    static ZoneId zone(Context c) {
+        return HomePrefs.zone(c);
     }
 
     static int methodIndex(Context c) {
@@ -99,10 +105,10 @@ final class PrayerPrefs {
      * offsets, so the panel's prayer settings never shift the sky.
      */
     static PrayerDay skyDay(Context c, long now) {
-        return new PrayerDay(now, where(c), Config.get(c).method, Madhab.SHAFI, new int[6], Config.get(c).primaryZone);
+        return new PrayerDay(now, where(c), Config.get(c).method, Madhab.SHAFI, new int[6], zone(c));
     }
 
     static PrayerDay day(Context c, long now) {
-        return new PrayerDay(now, where(c), METHODS[methodIndex(c)], hanafi(c) ? Madhab.HANAFI : Madhab.SHAFI, offsets(c), Config.get(c).primaryZone);
+        return new PrayerDay(now, where(c), METHODS[methodIndex(c)], hanafi(c) ? Madhab.HANAFI : Madhab.SHAFI, offsets(c), zone(c));
     }
 }

@@ -44,6 +44,13 @@ final class TileAdapter extends RecyclerView.Adapter<TileAdapter.Holder> {
         if (cardWidth > 0) {
             lp.width = cardWidth;
             lp.gravity = Gravity.CENTER_HORIZONTAL;
+            ViewGroup.LayoutParams rootLp = v.getLayoutParams();
+            int rootW = cardWidth + v.getPaddingLeft() + v.getPaddingRight();
+            if (rootLp == null) {
+                v.setLayoutParams(new RecyclerView.LayoutParams(rootW, ViewGroup.LayoutParams.WRAP_CONTENT));
+            } else {
+                rootLp.width = rootW;
+            }
         }
         h.card.setClipToOutline(true);
         return h;
