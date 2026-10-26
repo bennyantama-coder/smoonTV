@@ -132,6 +132,71 @@ final class HomePrefs {
         of(c).edit().putBoolean("hint_seen", true).apply();
     }
 
+    /** Adhan alarm. On until the remote turns it off. */
+    static boolean adhanOn(Context c) {
+        return of(c).getBoolean("adhan", true);
+    }
+
+    static void setAdhanOn(Context c, boolean on) {
+        of(c).edit().putBoolean("adhan", on).apply();
+    }
+
+    /** Per prayer, indexed like {@link PrayerDay}. Sunrise is unused. Default on. */
+    static boolean adhanPrayer(Context c, int prayer) {
+        return of(c).getBoolean("adhan_p_" + prayer, true);
+    }
+
+    static void setAdhanPrayer(Context c, int prayer, boolean on) {
+        of(c).edit().putBoolean("adhan_p_" + prayer, on).apply();
+    }
+
+    /** 0 pelan, 1 sedang, 2 keras. */
+    static int adhanVolume(Context c) {
+        return Math.max(0, Math.min(2, of(c).getInt("adhan_vol", 1)));
+    }
+
+    static void setAdhanVolume(Context c, int volume) {
+        of(c).edit().putInt("adhan_vol", Math.max(0, Math.min(2, volume))).apply();
+    }
+
+    static float adhanGain(Context c) {
+        switch (adhanVolume(c)) {
+            case 0:
+                return 0.4f;
+            case 2:
+                return 1f;
+            default:
+                return 0.7f;
+        }
+    }
+
+    static String adhanVolumeLabel(Context c) {
+        switch (adhanVolume(c)) {
+            case 0:
+                return "Pelan";
+            case 2:
+                return "Keras";
+            default:
+                return "Sedang";
+        }
+    }
+
+    static void setAdhanFile(Context c, boolean fajr, boolean use) {
+        of(c).edit().putBoolean(fajr ? "adhan_use_fajr" : "adhan_use_other", use).apply();
+    }
+
+    static boolean adhanUsesFile(Context c, boolean fajr) {
+        return of(c).getBoolean(fajr ? "adhan_use_fajr" : "adhan_use_other", false)
+                && AdhanFiles.file(c, fajr).isFile();
+    }
+
+    /** @return false when this prayer minute was already claimed */
+    static boolean claimAdhan(Context c, String key) {
+        SharedPreferences prefs = of(c);
+        if (key == null || key.equals(prefs.getString("adhan_claim", ""))) return false;
+        return prefs.edit().putString("adhan_claim", key).commit();
+    }
+
     private static double parseCoord(String raw, double fallback, double limit) {
         try {
             double v = Double.parseDouble(raw);

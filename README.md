@@ -12,6 +12,7 @@ Tahan tombol OK (atau tombol Menu) di layar WidgeTV. Perubahan tersimpan di TV d
 - **Lokasi:** Padang (bawaan), Payakumbuh, Bukittinggi, Pekanbaru, Jakarta, Madinah, Makkah, atau koordinat sendiri. Dipakai untuk waktu salat dan cuaca. Zona sistem TV tidak diubah.
 - **Tata letak:** tampil/sembunyi, ukuran, dan urutan baris jam, cuaca, waktu salat, dan kutipan. Dock tetap di bawah.
 - **Waktu salat:** metode yang ada di kode (bawaan Singapore; Kemenag tidak ada), mazhab Syafi’i, koreksi ±30 menit (bawaan 0).
+- **Adzan:** alarm pada lima waktu. Subuh bunyinya berbeda (ada kalimat salat lebih baik daripada tidur). Zuhur, Asar, Magrib, dan Isya satu rekaman. Bisa diganti dari Files/USB. OK atau Back menghentikan.
 
 Back keluar dari WidgeTV ke launcher bawaan bila tidak ada panel yang terbuka.
 

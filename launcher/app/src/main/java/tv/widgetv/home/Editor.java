@@ -24,7 +24,7 @@ import java.util.Locale;
  * Long-press OK (or the Menu key) opens it. Back steps out; the home screen stays underneath.
  */
 final class Editor {
-    private enum Screen { HOME, DOCK, ADD, WALL, GALLERY, URL, PLACE, CUSTOM, ROWS }
+    private enum Screen { HOME, DOCK, ADD, WALL, GALLERY, URL, PLACE, CUSTOM, ROWS, ADHAN }
 
     private static final class Item {
         final String label;
@@ -223,6 +223,9 @@ final class Editor {
             case ROWS:
                 onRowsOk();
                 break;
+            case ADHAN:
+                onAdhanOk(item);
+                break;
             default:
                 break;
         }
@@ -265,6 +268,9 @@ final class Editor {
                 push(Screen.ROWS);
                 break;
             case 4:
+                push(Screen.ADHAN);
+                break;
+            case 5:
                 activity.editorOpenPrayer();
                 break;
             default:
@@ -414,6 +420,47 @@ final class Editor {
         if (index == 4) onBack();
     }
 
+    private void onAdhanOk(Item item) {
+        String tag = item.tag == null ? "" : item.tag;
+        if ("back".equals(tag)) {
+            onBack();
+            return;
+        }
+        if ("master".equals(tag)) {
+            HomePrefs.setAdhanOn(activity, !HomePrefs.adhanOn(activity));
+            activity.rescheduleAdhan();
+            flash(HomePrefs.adhanOn(activity) ? "Adzan hidup" : "Adzan mati");
+            show();
+            return;
+        }
+        if (tag.startsWith("p")) {
+            int prayer = Integer.parseInt(tag.substring(1));
+            boolean on = !HomePrefs.adhanPrayer(activity, prayer);
+            HomePrefs.setAdhanPrayer(activity, prayer, on);
+            activity.rescheduleAdhan();
+            flash(AdhanCue.label(prayer) + (on ? " hidup" : " mati"));
+            show();
+            return;
+        }
+        if ("hear0".equals(tag)) {
+            activity.previewAdhan(AdhanCue.FAJR);
+            flash("Memutar adzan Subuh");
+            return;
+        }
+        if ("hear2".equals(tag)) {
+            activity.previewAdhan(AdhanCue.DHUHR);
+            flash("Memutar adzan Zuhur");
+            return;
+        }
+        if ("file0".equals(tag)) {
+            activity.editorPickAdhan(true);
+            return;
+        }
+        if ("file2".equals(tag)) {
+            activity.editorPickAdhan(false);
+        }
+    }
+
     private void onRowsOk() {
         if (index == 0) {
             rowSizeMode = !rowSizeMode;
@@ -453,6 +500,21 @@ final class Editor {
             else if (index == 1) customLng = clamp(customLng + dir * step, -180, 180);
             else customZone = (customZone + dir + Places.ZONES.length) % Places.ZONES.length;
             show();
+            return;
+        }
+        if (screen == Screen.ADHAN) {
+            String tag = items.get(index).tag;
+            if ("vol".equals(tag)) {
+                HomePrefs.setAdhanVolume(activity, HomePrefs.adhanVolume(activity) + dir);
+                AdhanPlayer.applyVolume(activity);
+                show();
+            } else if ("file0".equals(tag) || "file2".equals(tag)) {
+                boolean fajr = "file0".equals(tag);
+                if (dir < 0) HomePrefs.setAdhanFile(activity, fajr, false);
+                else if (AdhanFiles.file(activity, fajr).isFile()) HomePrefs.setAdhanFile(activity, fajr, true);
+                else flash("Pilih berkas dulu dengan OK");
+                show();
+            }
             return;
         }
         if (screen == Screen.ROWS && index > 0 && index < items.size() - 1) {
@@ -561,6 +623,7 @@ final class Editor {
                 out.add(new Item("Wallpaper", wallLabel()));
                 out.add(new Item("Lokasi", HomePrefs.place(activity).name));
                 out.add(new Item("Tata letak baris", ""));
+                out.add(new Item("Adzan & alarm", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati"));
                 out.add(new Item("Waktu salat & koreksi", ""));
                 out.add(new Item("Tutup", ""));
                 break;
@@ -635,10 +698,32 @@ final class Editor {
                 }
                 out.add(new Item("Kembali", ""));
                 break;
+            case ADHAN:
+                out.add(new Item("Adzan", HomePrefs.adhanOn(activity) ? "Hidup" : "Mati", "master"));
+                for (int p : AdhanCue.PRAYERS) {
+                    out.add(new Item(AdhanCue.label(p), HomePrefs.adhanPrayer(activity, p) ? "Hidup" : "Mati", "p" + p));
+                }
+                out.add(new Item("Volume", HomePrefs.adhanVolumeLabel(activity), "vol"));
+                out.add(new Item("Dengarkan Subuh", "", "hear0"));
+                out.add(new Item("Dengarkan salat lain", "", "hear2"));
+                out.add(new Item("Rekaman Subuh", fileLabel(true), "file0"));
+                out.add(new Item("Rekaman salat lain", fileLabel(false), "file2"));
+                out.add(new Item("Kembali", "", "back"));
+                break;
             default:
                 break;
         }
         return out;
+    }
+
+    private String fileLabel(boolean fajr) {
+        if (HomePrefs.adhanUsesFile(activity, fajr)) return "File sendiri";
+        if (AdhanFiles.file(activity, fajr).isFile()) return "Bawaan · file tersimpan";
+        return "Bawaan";
+    }
+
+    void refresh() {
+        if (open) show();
     }
 
     private void paint() {
@@ -723,6 +808,8 @@ final class Editor {
                 return "Koordinat sendiri";
             case ROWS:
                 return "Tata letak";
+            case ADHAN:
+                return "Adzan & alarm";
             default:
                 return "Sunting WidgeTV";
         }
@@ -748,6 +835,10 @@ final class Editor {
                 return rowSizeMode
                         ? "OK tampil/sembunyi · kiri/kanan ukuran. OK pada Mode untuk mengubah urutan."
                         : "Kiri naik · kanan turun. Dock tetap di bawah.";
+            case ADHAN:
+                return "Subuh bunyinya berbeda: ada kalimat salat lebih baik daripada tidur. "
+                        + "Zuhur, Asar, Magrib, dan Isya satu rekaman. Alarm pada waktu yang sudah dikoreksi. "
+                        + "Back menghentikan. Paling andal saat WidgeTV terbuka.";
             default:
                 return "Atas/bawah pilih · OK buka · Back tutup. Tahan OK dari layar utama untuk membuka lagi.";
         }

@@ -71,7 +71,7 @@ import java.util.concurrent.Executors;
  * is a (zone, index) pair, and one gold ring (GlassHighlight) springs to whatever that points at.
  * Zones top to bottom: pills (TOP), prayer timeline (or, with prayer_enabled=false, the clock header),
  * dock, grid; plus the Inputs dropdown and the settings panel as modal zones. Hold OK to open the
- * on-TV editor (dock, wallpaper, city, widget rows), which is stored in HomePrefs. Everything time-based
+ * on-TV editor (dock, wallpaper, city, widget rows, adhan alarm), which is stored in HomePrefs. Everything time-based
  * updates on ACTION_TIME_TICK only. Defaults come from res/values/config.xml (Config).
  */
 public class MainActivity extends Activity {
@@ -79,6 +79,8 @@ public class MainActivity extends Activity {
     private static final int COLS = 4;
     static final int REQ_WALL = 4101;
     static final int REQ_READ = 4102;
+    static final int REQ_ADHAN_FAJR = 4103;
+    static final int REQ_ADHAN_OTHER = 4104;
     /** Debug broadcast action: "<applicationId>.DEBUG_SKY". */
     private String debugAction() {
         return getPackageName() + ".DEBUG_SKY";
@@ -122,7 +124,7 @@ public class MainActivity extends Activity {
     private View hereWeather, thought;
     private ImageView awayFlag, wallpaper;
     private View wallScrim;
-    private TextView weatherCity, editHint;
+    private TextView weatherCity, editHint, adhanBanner;
     private Editor editor;
     private int wallGen;
     private boolean okLong;
@@ -159,6 +161,7 @@ public class MainActivity extends Activity {
         wallpaper = findViewById(R.id.wallpaper);
         wallScrim = findViewById(R.id.wallpaper_scrim);
         editHint = findViewById(R.id.edit_hint);
+        adhanBanner = findViewById(R.id.adhan_banner);
         awayFlag = findViewById(R.id.away_flag);
         awayTemp = findViewById(R.id.away_temp);
         awayRange = findViewById(R.id.away_range);
@@ -209,6 +212,21 @@ public class MainActivity extends Activity {
         editor = new Editor(this);
         ((FrameLayout) findViewById(R.id.root)).addView(editor.view(), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        AdhanPlayer.setUi(new AdhanPlayer.Ui() {
+            @Override
+            public void onPlaying(int prayer, boolean preview) {
+                if (isDestroyed()) return;
+                showAdhanBanner(prayer);
+            }
+
+            @Override
+            public void onStopped() {
+                if (isDestroyed()) return;
+                adhanBanner.setVisibility(View.GONE);
+            }
+        });
+        if (AdhanPlayer.playing()) showAdhanBanner(AdhanPlayer.activePrayer());
+        AdhanScheduler.schedule(this);
         applyWidgets();
         showWallpaper();
 
@@ -256,12 +274,21 @@ public class MainActivity extends Activity {
         register(timeReceiver, timeFilter, false);
         updateClock(); // also the weather stale check
         loadApps(false);
+        if (AdhanPlayer.playing()) showAdhanBanner(AdhanPlayer.activePrayer());
+        AdhanScheduler.schedule(this);
+    }
+
+    private void showAdhanBanner(int prayer) {
+        if (!AdhanCue.isPrayer(prayer)) return;
+        adhanBanner.setText("Adzan " + AdhanCue.label(prayer) + " · OK hentikan");
+        adhanBanner.setVisibility(View.VISIBLE);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
         resumed = false;
+        if (AdhanPlayer.previewing()) AdhanPlayer.stop(this);
         unregisterReceiver(timeReceiver);
         main.removeCallbacks(okLongRunnable);
         if (zone == Zone.MENU) closeMenu();
@@ -294,6 +321,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         main.removeCallbacks(okLongRunnable);
+        if (AdhanPlayer.previewing()) AdhanPlayer.stop(this);
+        AdhanPlayer.setUi(null);
         super.onDestroy();
         unregisterReceiver(packageReceiver);
         if (BuildConfig.DEBUG) unregisterReceiver(debugReceiver);
@@ -382,6 +411,7 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent ev) {
         int code = ev.getKeyCode();
         boolean down = ev.getAction() == KeyEvent.ACTION_DOWN;
+        if (stopAdhanKey(code, down)) return true;
         if (editor != null && editor.isOpen()) {
             if (editor.typing()) {
                 if (!down && code == KeyEvent.KEYCODE_BACK) {
@@ -804,6 +834,7 @@ public class MainActivity extends Activity {
         }
         refreshPrayer();
         renderPanel();
+        AdhanScheduler.schedule(this);
         Log.i(TAG, "prayer settings: hanafi=" + PrayerPrefs.hanafi(this) + " method="
                 + PrayerPrefs.METHODS[PrayerPrefs.methodIndex(this)] + " offsets=" + Arrays.toString(PrayerPrefs.offsets(this))
                 + " clockFont=" + PrayerPrefs.CLOCK_FONTS[PrayerPrefs.clockFont(this)]
@@ -851,7 +882,38 @@ public class MainActivity extends Activity {
         ZonedDateTime local = nowZoned();
         clock.setText(hm(local, h24));
         refreshPrayer(); // also redraws the date line and the second-clock line
+        maybeAdhan();
         weather.maybeFetch(false, this::renderDateAndWeather);
+    }
+
+    /** Backup for the alarm while this screen is open. The claim stops a second play in the same minute. */
+    private void maybeAdhan() {
+        if (!resumed || day == null || !cfg.prayerEnabled || !HomePrefs.adhanOn(this)) return;
+        if (fakeMinutes >= 0 || fakeDate != null) return;
+        long now = System.currentTimeMillis();
+        int prayer = AdhanCue.due(now, day.times, AdhanCue.GRACE_MS);
+        if (!AdhanCue.isPrayer(prayer) || !HomePrefs.adhanPrayer(this, prayer)) return;
+        long when = day.times[prayer];
+        if (!HomePrefs.claimAdhan(this, AdhanCue.stamp(prayer, when))) return;
+        AdhanScheduler.play(this, prayer, when);
+        AdhanScheduler.schedule(this);
+    }
+
+    /** OK or Back stops the adhan. Inside the editor, OK still chooses a row and Back stops first. */
+    private boolean stopAdhanKey(int code, boolean down) {
+        if (!AdhanPlayer.playing()) return false;
+        boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER;
+        boolean back = code == KeyEvent.KEYCODE_BACK;
+        if (!ok && !back) return false;
+        if (editor != null && editor.isOpen() && ok) return false;
+        if (down) {
+            main.removeCallbacks(okLongRunnable);
+            okLong = true;
+            return true;
+        }
+        AdhanPlayer.stop(this);
+        return true;
     }
 
     /** "12:30" (or "00:30" in 24-hour mode), no AM/PM. */
@@ -1250,6 +1312,7 @@ public class MainActivity extends Activity {
         weatherCity.setText(p.name);
         weather.maybeFetch(true, this::renderDateAndWeather);
         updateClock();
+        AdhanScheduler.schedule(this);
     }
 
     void editorReloadWallpaper() {
@@ -1263,6 +1326,26 @@ public class MainActivity extends Activity {
     void editorOpenPrayer() {
         editor.close();
         openPanel();
+    }
+
+    void rescheduleAdhan() {
+        AdhanScheduler.schedule(this);
+    }
+
+    void previewAdhan(int prayer) {
+        AdhanPlayer.play(this, prayer, true, null);
+    }
+
+    void editorPickAdhan(boolean fajr) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("audio/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, fajr ? REQ_ADHAN_FAJR : REQ_ADHAN_OTHER);
+        } catch (ActivityNotFoundException e) {
+            editor.flash("Files tidak ada di TV ini");
+        }
     }
 
     void editorPickImage() {
@@ -1382,10 +1465,35 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void savePickedAdhan(Uri uri, boolean fajr) {
+        if (editor != null) editor.flash("Menyimpan rekaman…");
+        io.execute(() -> {
+            String err = AdhanFiles.save(getApplicationContext(), uri, fajr);
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (err != null) {
+                    if (editor != null) editor.flash(err);
+                    return;
+                }
+                HomePrefs.setAdhanFile(this, fajr, true);
+                if (editor != null) {
+                    editor.flash(fajr ? "Rekaman Subuh tersimpan" : "Rekaman salat lain tersimpan");
+                    editor.refresh();
+                }
+            });
+        });
+    }
+
     @Override
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_ADHAN_FAJR || requestCode == REQ_ADHAN_OTHER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                savePickedAdhan(data.getData(), requestCode == REQ_ADHAN_FAJR);
+            } else if (editor != null) editor.flash("Tidak ada rekaman dipilih");
+            return;
+        }
         if (requestCode != REQ_WALL) return;
         if (resultCode == RESULT_OK && data != null && data.getData() != null) savePickedWallpaper(data.getData());
         else if (editor != null) editor.flash("Tidak ada gambar dipilih");
