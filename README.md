@@ -1,6 +1,19 @@
 > **Edisi Padang / SMOON 230T:** mulai dari [PANDUAN-SMOON.md](PANDUAN-SMOON.md).
 > Jangan mengikuti petunjuk debloat/takeover upstream di bawah. Launcher bawaan dan aplikasi sistem harus tetap aktif.
-> Status paket ini: sumber dan workflow disiapkan; build APK belum lulus atau terverifikasi.
+> WidgeTV dipasang dari daftar aplikasi. Ia tidak mengganti Home bawaan.
+> `assembleDebug`, `lintDebug`, dan `testDebugUnitTest` lulus secara lokal (Gradle 8.7, SDK 34). Artifact Actions: `WidgeTV-Padang-editable`.
+
+## Sunting di TV
+
+Tahan tombol OK (atau tombol Menu) di layar WidgeTV. Perubahan tersimpan di TV dan tetap ada setelah reboot, tanpa build ulang dari GitHub.
+
+- **Dock:** tambah aplikasi yang sudah terpasang, hapus, geser kiri/kanan. Netflix dan YouTube tetap bawaan sampai dock diubah, dan hanya muncul jika paketnya ada.
+- **Wallpaper:** langit bawaan, gambar dari Files/USB, atau URL. Login Google Drive belum ada; unduh gambarnya lalu pilih lewat Files, atau tempel tautan file publik (`drive.google.com/file/d/…`).
+- **Lokasi:** Padang (bawaan), Payakumbuh, Bukittinggi, Pekanbaru, Jakarta, Madinah, Makkah, atau koordinat sendiri. Dipakai untuk waktu salat dan cuaca. Zona sistem TV tidak diubah.
+- **Tata letak:** tampil/sembunyi, ukuran, dan urutan baris jam, cuaca, waktu salat, dan kutipan. Dock tetap di bawah.
+- **Waktu salat:** metode yang ada di kode (bawaan Singapore; Kemenag tidak ada), mazhab Syafi’i, koreksi ±30 menit (bawaan 0).
+
+Back keluar dari WidgeTV ke launcher bawaan bila tidak ada panel yang terbuka.
 
 # WidgeTV
 

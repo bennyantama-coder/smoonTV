@@ -2,14 +2,17 @@
 
 ## Status yang sebenarnya
 
-Sumber disiapkan dari ashfaqhaq/widgetv commit a497eedf0c55a2c7d0bb927152dbe851f2a135f7.
-Struktur proyek telah diperiksa sebelum workflow dibuat: proyek Android ada di launcher/, modul app,
-Android Gradle Plugin 8.5.2, Gradle Wrapper 8.7, Java 17, compile/target SDK 34, minSdk 28 (Android 9).
-Android SMOON Anda harus diperiksa; nama model tidak membuktikan versi Android.
-Belum ada build APK yang lulus. Upaya menjalankan Gradle di lingkungan penyusunan gagal mengunduh
-distribusi (Network is unreachable); Android SDK dan JDK compiler lokal juga belum tersedia.
-Pemeriksaan XML, sintaks Bash, dan git diff bukan pengganti kompilasi, lint, atau pengujian perangkat.
-Belum ada workflow yang dijalankan di akun GitHub, belum ada fork/repository baru yang dibuat.
+Sumber awal dari ashfaqhaq/widgetv. Proyek Android ada di `launcher/`: Android Gradle Plugin 8.5.2,
+Gradle Wrapper 8.7, Java 17, compile/target SDK 34, minSdk 28 (Android 9).
+Versi aplikasi ini: 1.1 (versionCode 2), bisa disunting dari remote.
+
+`./gradlew assembleDebug lintDebug testDebugUnitTest` lulus di lingkungan penyusunan
+(JDK 21 menjalankan toolchain Java 17, Android SDK 34, build-tools 34.0.0). APK debug tertanda v2.
+Itu setara dengan job workflow. Centang hijau di GitHub Actions pada commit ini adalah bukti run
+Actions itu sendiri; unduh artifact hanya dari run yang hijau.
+
+Android SMOON harus dicek di perangkat. Nama model tidak membuktikan versi Android.
+Build lulus belum membuktikan remote, firmware, atau Netflix di SMOON 230T.
 
 ## Konfigurasi
 
@@ -24,9 +27,10 @@ Belum ada workflow yang dijalankan di akun GitHub, belum ada fork/repository bar
 | Koreksi awal | 0 menit untuk lima waktu |
 | Dock | Netflix TV/seluler dan YouTube TV/seluler, hanya bila paket terpasang |
 
-Kode jam utama, tanggal, kalender perhitungan salat, label timeline, tanggal Hijriah, dan pergantian
-pola harian memakai zona Padang. Tanggal perhitungan dikirim sebagai year/month/day eksplisit,
-agar tidak kembali mengikuti zona perangkat lewat DateComponents.from(Date).
+Selama kota belum diganti di TV, jam, tanggal, kalender salat, label timeline, tanggal Hijriah,
+dan pola harian memakai Asia/Jakarta (Padang). Setelah kota diganti, jam dan salat mengikuti zona
+kota itu; zona sistem TV tetap tidak diubah. Tanggal perhitungan dikirim sebagai year/month/day
+eksplisit, agar tidak kembali mengikuti zona perangkat lewat DateComponents.from(Date).
 
 ## Metode yang benar-benar tersedia
 
@@ -39,7 +43,7 @@ Mazhab SHAFI menentukan perhitungan Asar, terpisah dari metode sudut Subuh/Isya.
 
 ### Penyesuaian menit lewat remote
 
-Pilih jam/timeline kemudian tekan OK untuk membuka Prayer settings.
+Tekan OK sebentar pada garis waktu salat, atau buka editor (tahan OK) lalu pilih "Waktu salat & koreksi".
 Pilih baris Fajr/Subuh, Dhuhr/Zuhur, Asr/Asar, Maghrib, atau Isha/Isya offset dengan atas/bawah;
 ubah dengan kiri/kanan, satu menit per langkah, batas -30 sampai +30 menit.
 Nilai disimpan di aplikasi dan tidak memerlukan build ulang. Tidak ada offset Terbit dalam panel ini.
@@ -50,43 +54,94 @@ menurut musim, sehingga satu offset tidak menjamin cocok sepanjang tahun.
 Nilai awal hanya berlaku jika preferensi sebelumnya belum tersimpan; setelah memperbarui APK,
 periksa lagi metode/mazhab/offset di panel karena pengaturan lama dipertahankan.
 
+## Sunting di TV (tanpa build ulang)
+
+Buka WidgeTV dari daftar aplikasi, lalu **tahan tombol OK** kira-kira setengah detik.
+Tombol Menu pada remote melakukan hal yang sama. Panel "Sunting WidgeTV" terbuka.
+Setiap perubahan langsung ditulis ke penyimpanan aplikasi dan tetap ada setelah reboot
+atau setelah TV dimatikan. Menghapus data aplikasi atau meng-uninstall mengembalikan bawaan.
+
+| Bagian | Remote | Isi |
+|---|---|---|
+| Dock aplikasi | Kiri/kanan geser, OK tandai hapus, OK lagi hapus, "Tambah aplikasi" | Aplikasi yang sudah terpasang, maksimal 8. Netflix (`com.netflix.ninja` / `com.netflix.mediaclient`) dan YouTube (`com.google.android.youtube.tv` / `com.google.android.youtube`) tetap di dock sampai Anda mengubahnya, dan hanya terlihat jika paketnya terpasang. |
+| Wallpaper | OK pada pilihan | Langit bawaan; gambar lewat Files atau USB; daftar gambar di penyimpanan (minta izin bila perlu); tempel URL. |
+| Lokasi | OK pada kota | Padang (bawaan), Payakumbuh, Bukittinggi, Pekanbaru, Jakarta, Madinah, Makkah, atau koordinat + zona waktu. Untuk waktu salat dan cuaca. Jam mengikuti zona kota itu. Zona sistem TV tidak diubah. |
+| Tata letak baris | OK tampil/sembunyi, kiri/kanan ukuran; ganti mode untuk urutan | Jam, cuaca, waktu salat, kutipan. Ukuran: Kecil / Biasa / Besar. Dock tetap di bawah. |
+| Waktu salat & koreksi | Panel yang sudah ada: kiri/kanan ubah | Metode, mazhab, offset menit. Lihat bagian Metode. |
+
+Back menutup panel, atau keluar dari WidgeTV ke launcher bawaan bila tidak ada panel.
+
+### Wallpaper dan Google Drive
+
+Path yang dipakai: Files/USB dan URL. Gambar disalin ke penyimpanan internal aplikasi (diperkecil, JPEG)
+supaya tetap ada bila USB dicabut.
+
+Login Google Drive (OAuth) **belum** dibuat: terlalu berat untuk potongan pertama dan mudah rusak
+bila token TV tidak selesai. Cara yang jalan sekarang:
+
+1. Di ponsel atau komputer, unduh gambar dari Drive.
+2. Salin ke USB, colok ke SMOON, lalu di WidgeTV pilih **Pilih dari Files atau USB**.
+3. Atau tempel URL gambar langsung (`https://…/foto.jpg`).
+4. Tautan publik berbentuk `https://drive.google.com/file/d/ID/view` dicoba diubah ke unduhan langsung.
+   Bila Google membalas halaman HTML (file tidak publik atau minta konfirmasi), TV menolaknya.
+   Unduh manual, lalu pakai Files.
+
+### Lokasi
+
+Bawaan tetap Padang, -0.9471, 100.4172, Asia/Jakarta. Kota lain memakai pusat kota
+(Makkah di Masjidil Haram, Madinah di Masjid Nabawi). "Koordinat sendiri" menggeser lintang/bujur
+0,01 derajat per tekanan (tahan tombol untuk 0,1) dan memilih zona: Jakarta, Pontianak, Makassar,
+Jayapura, Singapore, Kuala Lumpur, Riyadh, atau UTC.
+
 ## Membangun lewat GitHub Actions
 
-1. Fork https://github.com/ashfaqhaq/widgetv ke akun sendiri.
-2. Ekstrak ZIP ini. Salin seluruh isinya ke root fork, termasuk folder tersembunyi .github/;
-   pertahankan launcher/, content/, dan tools/ pada level yang sama dengan README.md.
-   Cara Git lokal: checkout fork, timpa file dengan isi ZIP, lalu git add -A, commit, dan push.
-   Jika memakai unggahan web, pastikan .github/workflows/android-apk.yml ikut diunggah.
-3. Di fork, buka Actions dan aktifkan workflow bila GitHub memintanya.
-4. Jalankan Build WidgeTV Padang APK lewat Run workflow, atau push ke main/master.
-5. Tunggu seluruh job build hijau. Workflow menjalankan assembleDebug, lintDebug, testDebugUnitTest,
-   lalu memeriksa tanda tangan APK dan membuat SHA256SUMS.txt. Proyek upstream tidak menyertakan
-   unit test: keberhasilan task test yang kosong bukan bukti pengujian fungsi.
-6. Unduh artifact WidgeTV-Padang-APK. Artifact APK hanya diunggah setelah semua langkah wajib lulus.
-   Artifact WidgeTV-build-reports membantu membaca kegagalan lint/pengujian.
-7. Jika gagal, simpan log langkah merah. Status gagal harus diperbaiki sebelum APK disebut siap.
+Workflow: **Build WidgeTV Padang APK** (`.github/workflows/android-apk.yml`).
+Ia berjalan pada push ke `main`/`master`, pada pull request, dan lewat **Run workflow**.
+
+1. Buka tab **Actions** di repo ini. Aktifkan Actions bila GitHub meminta.
+2. Pilih **Build WidgeTV Padang APK** di sidebar kiri.
+3. Klik **Run workflow**, pilih branch yang berisi kode ini, lalu **Run workflow** lagi.
+4. Tunggu job `build` hijau. Job itu menjalankan `assembleDebug`, `lintDebug`, `testDebugUnitTest`,
+   memeriksa tanda tangan APK, dan menulis `SHA256SUMS.txt`.
+5. Di run yang hijau, buka **Artifacts** dan unduh **WidgeTV-Padang-editable**.
+   Di dalamnya ada `WidgeTV-Padang-editable-debug.apk` dan `SHA256SUMS.txt`.
+   Artifact hanya diunggah setelah langkah wajib lulus.
+   Artifact **WidgeTV-build-reports** membantu membaca kegagalan lint atau tes.
+6. Jika ada langkah merah, jangan pasang APK dari run itu. Simpan lognya.
+
+Setup Android di workflow hanya meminta paket `platform-tools`, lalu `sdkmanager` memasang
+`platforms;android-34` dan `build-tools;34.0.0`. Paket SDK lama bernama `tools` tidak dipakai;
+cmdline-tools baru menolak nama itu.
 
 APK ini varian debug bertanda tangan debug untuk sideload pribadi. Keystore runner GitHub bersifat
 sementara: build berikutnya bisa memakai sertifikat berbeda dan menolak update di atas instalasi lama.
-Untuk distribusi/update jangka panjang diperlukan keystore stabil; jangan memasukkan kunci privat ke repo.
+Cabut pemasangan lama, lalu pasang yang baru, bila TV menolak update.
+Untuk distribusi jangka panjang diperlukan keystore stabil; jangan memasukkan kunci privat ke repo.
 
-## Instalasi tanpa menonaktifkan launcher
+## Instalasi di SMOON 230T tanpa mengganti launcher bawaan
 
-Transfer APK ke TV melalui USB/file manager dan izinkan instalasi dari sumber tersebut bila diminta.
-Buka WidgeTV dari daftar aplikasi. Jangan jalankan prompt debloat upstream atau petunjuk takeover.
-Jika sistem menawarkan pemilih Home, coba sekali dahulu; memilih WidgeTV secara manual bersifat opsional.
-Jika firmware tidak menawarkan penggantian Home, gunakan dari daftar aplikasi; jangan memaksa dengan
-menonaktifkan launcher bawaan atau setup wizard.
+WidgeTV **bukan** Home default. Manifest hanya memakai `LEANBACK_LAUNCHER` dan `LAUNCHER`,
+tanpa kategori `HOME`, jadi pemasangan tidak mengambil alih tombol Home.
 
-Alternatif ADB setelah perangkat benar-benar tersambung: adb install -r WidgeTV-Padang-debug.apk.
-Tidak perlu USB debugging untuk instalasi dari USB/file manager. Port USB-A TV box tidak otomatis
-mendukung sambungan ADB ke komputer; jangan mengandalkan kabel USB-A ke USB-A.
-Skrip tools/build-install.sh hanya memasang APK, tidak mengubah default HOME.
-Skrip tools/disable.sh dan tools/reapply.sh sengaja diblokir pada edisi ini.
+1. Unduh artifact **WidgeTV-Padang-editable** dari run Actions yang hijau (lihat di atas).
+2. Keluarkan `WidgeTV-Padang-editable-debug.apk`. Salin ke USB, atau ke penyimpanan TV lewat file manager.
+3. Colok USB ke SMOON. Buka aplikasi Files / file manager bawaan.
+4. Buka APK itu. Bila TV minta, izinkan pemasangan dari sumber tersebut untuk file manager itu saja.
+5. Setelah terpasang, buka **WidgeTV dari daftar aplikasi**. Jangan nonaktifkan launcher bawaan,
+   setup wizard, atau aplikasi sistem. Jangan jalankan skrip debloat.
+6. Tombol Home tetap membuka launcher stok. Back dari WidgeTV (bila panel sunting tertutup) kembali ke sana.
+7. Tahan OK untuk sunting dock, wallpaper, kota, dan baris widget.
 
-Pintasan bukan pemasang Netflix/YouTube dan tidak membuka sertifikasi DRM. Jika aplikasi tidak terpasang,
-tile tidak muncul. Bila versi TV dan seluler keduanya terpasang, keduanya dapat muncul di dock.
-Build lulus belum membuktikan kompatibilitas remote, firmware, performa, atau Netflix pada SMOON;
-uji buka/tutup aplikasi, navigasi D-pad, kembali ke Home, pergantian tanggal WIB dan offset salat di perangkat.
+Tidak perlu USB debugging untuk pemasangan dari USB. Port USB-A TV box tidak otomatis menjadi ADB
+ke komputer; jangan mengandalkan kabel USB-A ke USB-A.
+
+Alternatif bila ADB jaringan sudah tersambung dan diizinkan di TV:
+`adb install -r WidgeTV-Padang-editable-debug.apk`.
+`tools/build-install.sh` hanya membangun dan memasang APK, tidak mengubah Home.
+`tools/disable.sh` dan `tools/reapply.sh` sengaja diblokir pada edisi ini.
+
+Pintasan dock bukan pemasang Netflix atau YouTube dan tidak membuka DRM. Bila aplikasi tidak terpasang,
+ubinnya tidak muncul. Bila versi TV dan seluler keduanya terpasang, keduanya bisa ada di dock
+sampai Anda menghapusnya di mode sunting.
 
 Sumber upstream dan atribusi MIT tetap disertakan pada LICENSE dan NOTICE.md.

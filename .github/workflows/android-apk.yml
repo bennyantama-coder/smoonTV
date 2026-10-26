@@ -22,11 +22,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Do not pass the obsolete SDK package "tools"; current cmdline-tools rejects it.
       - uses: android-actions/setup-android@v3
         with:
-           packages: 'platform-tools'
+          packages: 'platform-tools'
       - name: Install SDK 34
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Sync daily thoughts
         run: cp ../content/thoughts.json app/src/main/res/raw/thoughts.json
@@ -37,13 +41,13 @@ jobs:
           test -s app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           mkdir -p ../dist
-          cp app/build/outputs/apk/debug/app-debug.apk ../dist/WidgeTV-Padang-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../dist/WidgeTV-Padang-editable-debug.apk
           cd ../dist
-          sha256sum WidgeTV-Padang-debug.apk > SHA256SUMS.txt
+          sha256sum WidgeTV-Padang-editable-debug.apk > SHA256SUMS.txt
       - name: Upload APK after checks pass
         uses: actions/upload-artifact@v4
         with:
-          name: WidgeTV-Padang-APK
+          name: WidgeTV-Padang-editable
           path: dist/*
           if-no-files-found: error
           retention-days: 30

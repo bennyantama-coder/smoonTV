@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and install only; preserve the stock HOME app.
 #
-# Usage: tools/build-install.sh                 build + install + set as home
+# Usage: tools/build-install.sh                 build + install; does not change the stock HOME app
 #        tools/build-install.sh --build-only    just build launcher/app/build/outputs/apk/debug/app-debug.apk
 #        GRADLE_FLAGS=--daemon tools/build-install.sh   faster repeat builds
 #

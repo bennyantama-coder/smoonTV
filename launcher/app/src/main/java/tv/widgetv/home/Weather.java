@@ -54,7 +54,10 @@ final class Weather {
     private final boolean enabled;
     /** 1 (prayer city) or 2 (plus the second clock's city). */
     private final int cities;
-    private final String url;
+    private final boolean second;
+    private final double secondLat, secondLng;
+    private final String units;
+    private String url;
     private boolean inFlight;
     private long lastAttempt;
 
@@ -62,13 +65,27 @@ final class Weather {
         prefs = c.getSharedPreferences("weather", Context.MODE_PRIVATE);
         Config cfg = Config.get(c);
         enabled = cfg.weatherEnabled;
-        cities = cfg.secondEnabled ? 2 : 1;
-        String lats = coord(cfg.lat) + (cities == 2 ? "," + coord(cfg.secondLat) : "");
-        String lngs = coord(cfg.lng) + (cities == 2 ? "," + coord(cfg.secondLng) : "");
-        url = "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
+        second = cfg.secondEnabled;
+        cities = second ? 2 : 1;
+        secondLat = cfg.secondLat;
+        secondLng = cfg.secondLng;
+        units = cfg.weatherUnits;
+        Place here = HomePrefs.place(c);
+        url = buildUrl(here.lat, here.lng);
+    }
+
+    /** Point the prayer-city forecast at a newly chosen location. The next fetch uses the new URL. */
+    void relocate(double lat, double lng) {
+        url = buildUrl(lat, lng);
+    }
+
+    private String buildUrl(double lat, double lng) {
+        String lats = coord(lat) + (second ? "," + coord(secondLat) : "");
+        String lngs = coord(lng) + (second ? "," + coord(secondLng) : "");
+        return "https://api.open-meteo.com/v1/forecast?latitude=" + lats + "&longitude=" + lngs
                 + "&current=temperature_2m,weather_code,is_day"
                 + "&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1"
-                + "&temperature_unit=" + cfg.weatherUnits;
+                + "&temperature_unit=" + units;
     }
 
     private static String coord(double v) {
